@@ -5,8 +5,9 @@
 @Author  :   WangYongpan 
 '''
 #
-PACKAGE_PATH = "/home/lisiyuan/anaconda3/envs/py27/lib/python2.7/site-packages/"
-IDA_PATH = "/data/lisiyuan/IDA_Pro6.8/idal64"
+PACKAGE_PATH = "/usr/lib/python3.12/site-packages/"
+PACKAGE_PATH2 = "/usr/lib/python3.12/site-packages/"
+IDA_PATH = "/tools/software/hex-rays/idapro/latest/ida" 
 FEATURE_EXTRACT_PATH = "ida_get_features.py"
 FCG_EXTRACT_PATH = "ida_get_func_call.py"
 

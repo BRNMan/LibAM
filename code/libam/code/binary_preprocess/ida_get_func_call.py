@@ -10,16 +10,20 @@ import sys, os
 
 from settings import *
 sys.path.insert(0, PACKAGE_PATH)
+sys.path.insert(0, PACKAGE_PATH2)
 # from settings import *
 from idaapi import *
 from idc import *
 from idautils import *
 import idc
+import ida_auto
+import ida_pro
+import ida_funcs
 
 # import matplotlib.pyplot as plt
 print("hello fcg")
-print(sys.path)
 import networkx as nx
+import pickle
 
 
 def get_func_len(func_ea):
@@ -47,26 +51,27 @@ def auto_analysis():
     #     func_num += 1
 
     # callers = dict()
-    inputName = idc.GetInputFilePath()
+    inputName = idc.get_idb_path()
     callees = dict()
     func_addr_dict = dict()
 
-    #
     for function_ea in Functions():  # SegStart(ea), SegEnd(ea)):
-
         if False == is_func_in_plt(function_ea):
-
-            f_name = GetFunctionName(function_ea)
+            f_name = idc.get_name(function_ea)
             func_addr_dict[f_name] = function_ea
-
             find_func = False
 
             for ref_ea in CodeRefsTo(function_ea, 0):
-                if False == is_func_in_plt(ref_ea):
+                # Find function associated with the call
+                ref_func = ida_funcs.get_func(ref_ea)
+                if not ref_func:
+                    # Functions in the PLT will be like this
+                    continue
+                ref_start_ea = ref_func.start_ea
+                if False == is_func_in_plt(ref_start_ea):
                     find_func = True
 
-                    caller_name = GetFunctionName(ref_ea)
-
+                    caller_name = idc.get_name(ref_start_ea)
                     callees[caller_name] = callees.get(caller_name, set())
 
                     callees[caller_name].add(f_name)
@@ -123,9 +128,9 @@ def auto_analysis():
     # # arch_name = inputName.split("/")[-3]
     # binary_name = opti_name+"||||"+project_name+"||||" + binary_name
     # save_name = "/data/wangyongpan/libdb_dataset_fcg/" + binary_name + "_fcg.pkl"
-    nx.write_gpickle(g, savePath)
+    with open(savePath, 'wb') as f:
+        pickle.dump(g, f, pickle.HIGHEST_PROTOCOL)
 
-
-Wait()
+ida_auto.auto_wait()
 auto_analysis()
-Exit(0)
+ida_pro.qexit(0)

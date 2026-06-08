@@ -6,40 +6,195 @@
 '''
 from idautils import *
 from idaapi import *
+import idaapi
+import ida_idaapi
 from idc import *
 
 # 获取基本块内每条指令的字符串常量和数值常量
+import ida_ua
+import ida_bytes
+import ida_segment
+import ida_nalt
+
 def getConst(ea, offset):
+    """
+    COPILOT HELPED HERE
+    Extract strings and constants from an address in a binary.
+    Updated for IDA Pro 9.3+ from the original IDA 6.8 version.
+    
+    :param ea: Linear address of the instruction
+    :param offset: Operand offset (0 for first operand, 1 for second, etc.)
+    :return: Tuple of (strings_list, consts_list)
+    """
     strings = []
     consts = []
-    opType1 = GetOpType(ea, offset)
-    if opType1 == idaapi.o_imm:
-        imm_value = GetOperandValue(ea, offset)
+    
+    # Get operand type - use modern API
+    opType1 = get_operand_type(ea, offset)
+    
+    if opType1 == ida_ua.o_imm:  # Immediate value operand
+        imm_value = get_operand_value(ea, offset)
+        
+        # Filter out small constants (0-10)
         if 0 <= imm_value <= 10:
             consts.append(imm_value)
         else:
-            if idaapi.isLoaded(imm_value) and idaapi.getseg(imm_value):
-                str_value = GetString(imm_value)
-                if str_value is None:
-                    str_value = GetString(imm_value + 0x40000)
+            # Check if the value points to a loaded memory address
+            if ida_bytes.is_loaded(imm_value):
+                seg = ida_segment.getseg(imm_value)
+                if seg:
+                    # Try to read string from the address
+                    str_value = get_string_from_address(imm_value)
+                    
+                    # If not found, try offset by 0x40000 (common relocation offset)
                     if str_value is None:
-                        consts.append(imm_value)
+                        str_value = get_string_from_address(imm_value + 0x40000)
+                        if str_value is None:
+                            consts.append(imm_value)
+                        else:
+                            # Validate string contains printable ASCII
+                            if is_valid_string(str_value):
+                                strings.append(str_value)
+                            else:
+                                consts.append(imm_value)
                     else:
-                        re = all(40 <= ord(c) < 128 for c in str_value)
-                        if re:
+                        if is_valid_string(str_value):
                             strings.append(str_value)
                         else:
                             consts.append(imm_value)
                 else:
-                    re = all(40 <= ord(c) < 128 for c in str_value)
-                    if re:
-                        strings.append(str_value)
-                    else:
-                        consts.append(imm_value)
+                    consts.append(imm_value)
             else:
                 consts.append(imm_value)
+    
     return strings, consts
-    pass
+
+
+def get_operand_type(ea, n):
+    """
+    Get type of instruction operand using modern IDA API.
+    
+    :param ea: Linear address of instruction
+    :param n: Operand number (0 or 1)
+    :return: Operand type constant
+    """
+    insn = ida_ua.insn_t()
+    inslen = ida_ua.decode_insn(insn, ea)
+    
+    if inslen == 0:
+        return -1
+    
+    return insn.ops[n].type
+
+
+def get_operand_value(ea, n):
+    """
+    Get value of instruction operand using modern IDA API.
+    
+    :param ea: Linear address of instruction
+    :param n: Operand number (0 or 1)
+    :return: Operand value
+    """
+    insn = ida_ua.insn_t()
+    inslen = ida_ua.decode_insn(insn, ea)
+    
+    if inslen == 0:
+        return -1
+    
+    op = insn.ops[n]
+    
+    if op.type == ida_ua.o_imm:
+        return op.value
+    elif op.type == ida_ua.o_mem:
+        return op.addr
+    elif op.type == ida_ua.o_far or op.type == ida_ua.o_near:
+        return op.addr
+    elif op.type == ida_ua.o_displ:
+        return op.addr
+    else:
+        return -1
+
+
+def get_string_from_address(ea, max_length=256):
+    """
+    Extract string from address using modern IDA API.
+    
+    :param ea: Linear address where string is located
+    :param max_length: Maximum string length to read
+    :return: String if found, None otherwise
+    """
+    try:
+        # Check if address is loaded
+        if not ida_bytes.is_loaded(ea):
+            return None
+        
+        # Try to detect string type at this address
+        flags = ida_bytes.get_flags(ea)
+        
+        # If it's already marked as a string, get its type
+        if ida_bytes.is_strlit(flags):
+            strtype = get_str_type(ea)
+            if strtype is None:
+                strtype = ida_nalt.STRTYPE_C  # Default to C-string
+        else:
+            strtype = ida_nalt.STRTYPE_C
+        
+        # Get string contents
+        str_contents = ida_bytes.get_strlit_contents(
+            ea, 
+            max_length, 
+            strtype
+        )
+        
+        if str_contents:
+            # Convert bytes to string if necessary
+            if isinstance(str_contents, bytes):
+                return str_contents.decode('utf-8', errors='ignore')
+            return str_contents
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error reading string from {hex(ea)}: {e}")
+        return None
+
+
+def get_str_type(ea):
+    """
+    Get string type at address.
+    
+    :param ea: Linear address
+    :return: String type constant or None
+    """
+    flags = ida_bytes.get_flags(ea)
+    
+    if ida_bytes.is_strlit(flags):
+        oi = ida_nalt.opinfo_t()
+        if ida_bytes.get_opinfo(oi, ea, 0, flags):
+            return oi.strtype
+    
+    return None
+
+
+def is_valid_string(s):
+    """
+    Validate if string contains printable ASCII characters.
+    
+    :param s: String to validate
+    :return: True if valid, False otherwise
+    """
+    if not s:
+        return False
+    
+    # Check if all characters are in printable ASCII range (40-127)
+    # This matches your original validation: 40 <= ord(c) < 128
+    try:
+        if isinstance(s, bytes):
+            return all(40 <= b < 128 for b in s)
+        else:
+            return all(40 <= ord(c) < 128 for c in s)
+    except (TypeError, ValueError):
+        return False
 
 # 获取给定基本块的所有字符串常量和数值常量
 def getBBconsts(bl):
@@ -49,9 +204,9 @@ def getBBconsts(bl):
     end = bl[1]
     inst_addr = start
     while inst_addr < end:
-        opcode = GetMnem(inst_addr)
+        opcode = idc.print_insn_mnem(inst_addr)
         if opcode in ['la', 'jalr', 'call', 'jal']:
-            inst_addr = NextHead(inst_addr)
+            inst_addr = idc.next_head(inst_addr)
             continue
         strings_src, consts_src = getConst(inst_addr, 0)
         strings_dst, consts_dst = getConst(inst_addr, 1)
@@ -65,7 +220,7 @@ def getBBconsts(bl):
             strings += strings_dst
         except:
             pass
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return strings, consts
     pass
 
@@ -73,7 +228,7 @@ def getBBconsts(bl):
 def getfunc_consts(func):
     strings = []
     consts = []
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     for bl in blocks:
         strs, conts = getBBconsts(bl)
         strings += strs
@@ -97,16 +252,16 @@ def calTransferIns(bl):
     invoke_num = 0
     inst_addr = start
     while inst_addr < end:
-        opcode = GetMnem(inst_addr)
+        opcode = idc.print_insn_mnem(inst_addr)
         re = [v for v in calls if opcode.lower() in v.lower()]
         if len(re) > 0:
             invoke_num += 1
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return invoke_num
 
 # 计算函数内转移指令的数量
 def getTransferInsts(func):
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     sumcalls = 0
     for bl in blocks:
         callnum = calTransferIns(bl)
@@ -121,16 +276,16 @@ def calCalls(bl):
     invoke_num = 0
     inst_addr = start
     while inst_addr < end:
-        opcode = GetMnem(inst_addr)
+        opcode = idc.print_insn_mnem(inst_addr)
         if opcode.lower() in calls:
             invoke_num += 1
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return invoke_num
     pass
 
 # 计算函数内调用的数量
 def getFuncCalls(func):
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     sumcalls = 0
     for bl in blocks:
         callnum = calCalls(bl)
@@ -145,12 +300,12 @@ def calInstrs(bl):
     invoke_num = 0
     while inst_addr < end:
         invoke_num += 1
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return invoke_num
 
 # 计算函数的指令数量
 def getFuncInstrs(func):
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     sumInstr = 0
     for bl in blocks:
         instr = calInstrs(bl)
@@ -171,11 +326,11 @@ def calArithmeticInstr(bl):
     invoke_num = 0
     inst_addr = start
     while inst_addr < end:
-        opcode = GetMnem(inst_addr)
+        opcode = idc.print_insn_mnem(inst_addr)
         re = [v for v in calls if opcode.lower() in v.lower()]
         if len(re) > 0:
             invoke_num += 1
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return invoke_num
 
 # 计算基本块内逻辑指令的数量
@@ -192,16 +347,16 @@ def calLogicInstructions(bl):
     invoke_num = 0
     inst_addr = start
     while inst_addr < end:
-        opcode = GetMnem(inst_addr)
+        opcode = idc.print_insn_mnem(inst_addr)
         re = [v for v in calls if opcode.lower() in v.lower()]
         if len(re) > 0:
             invoke_num += 1
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return invoke_num
 
 # 计算函数内的逻辑指令的数量
 def getLogicInsts(func):
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     sumcalls = 0
     for bl in blocks:
         callnum = calLogicInstructions(bl)
@@ -221,41 +376,109 @@ def retrieveExterns(bl, ea_externs):
             externs.append(ea_externs[ea])
         except:
             pass
-        inst_addr = NextHead(inst_addr)
+        inst_addr = idc.next_head(inst_addr)
     return externs
 
 
 def getLocalVariables(func):
-    args_num = get_stackVariables(func.startEA)
+    args_num = get_stackVariables(func.start_ea)
     return args_num
 
 # 获取存储的本地变量
+import ida_funcs
+import ida_frame
+import ida_typeinf
+
 def get_stackVariables(func_addr):
+    """
+    Get the number of stack variables in a function.
+    Updated for IDA Pro 9.3+ from the original IDA 6.8 version.
+
+    :param func_addr: Address of the function
+    :return: Number of stack variables (local variables)
+    """
     args = []
-    stack = GetFrame(func_addr)
-    if not stack:
+
+    # Get the function object
+    func = ida_funcs.get_func(func_addr)
+    if not func:
         return 0
-    firstM = GetFirstMember(stack)
-    lastM = GetLastMember(stack)
-    i = firstM
-    while i <= lastM:
-        mName = GetMemberName(stack, i)
-        mSize = GetMemberSize(stack, i)
-        if mSize:
-            i = i + mSize
-        else:
-            i = i+4
-        if mName not in args and mName and 'var_' in mName:
-            args.append(mName)
+
+    # Get the frame (stack frame) ID
+    frame_id = func.frame
+    if frame_id == ida_idaapi.BADADDR:
+        return 0
+
+    # Get the frame structure
+    tif = ida_typeinf.tinfo_t()
+    if not tif.get_type_by_tid(frame_id):
+        return 0
+
+    if not tif.is_udt():
+        return 0
+
+    # Get member count
+    member_count = tif.get_udt_nmembers()
+    if member_count <= 0:
+        return 0
+
+    # Iterate through members
+    for idx in range(member_count):
+        try:
+            # Get member name
+            mName = get_member_name_by_idx(frame_id, idx)
+
+            # Filter: only include variables with 'var_' in the name
+            if mName and 'var_' in mName and mName not in args:
+                args.append(mName)
+
+        except Exception as e:
+            print(f"Error processing member {idx}: {e}")
+            continue
+
     return len(args)
 
+
+def get_member_name_by_idx(frame_id, idx):
+    """
+    Get member name by index from a structure/frame.
+
+    :param frame_id: Structure/Frame type ID
+    :param idx: Member index
+    :return: Member name or None
+    """
+    tif = ida_typeinf.tinfo_t()
+    if not tif.get_type_by_tid(frame_id):
+        return None
+
+    if not tif.is_udt():
+        return None
+
+    try:
+        if idx < 0 or idx >= tif.get_udt_nmembers():
+            return None
+
+        # Get member TID by index
+        tidx = tif.get_udm_tid(idx)
+        if tidx == ida_idaapi.BADADDR:
+            return None
+
+        # Get the member details
+        udm = ida_typeinf.udm_t()
+        if tif.get_udm_by_tid(udm, tidx):
+            return udm.name
+
+        return None
+    except Exception as e:
+        print(f"Error getting member name at index {idx}: {e}")
+        return None
 # 获取基本块的数量
 def getBasicBlocks(func):
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     return len(blocks)
 
 # 获取调用该函数的地址数量
 def getIncommingCalls(func):
-    refs = CodeRefsTo(func.startEA, 0)
+    refs = CodeRefsTo(func.start_ea, 0)
     re = len([v for v in refs])
     return re

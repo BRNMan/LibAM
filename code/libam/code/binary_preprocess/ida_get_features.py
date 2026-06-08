@@ -12,16 +12,20 @@ from idautils import *
 from idaapi import *
 import json
 import idc
+import ida_auto
+import ida_pro
 from time import gmtime, strftime
 
 # 提取程序所有函数的基本块特征及函数特征
 def extract_features():
     times = {}
     time_begin = strftime("%Y-%m-%d %H:%M:%S", gmtime())
-    analysis_flags = idc.GetShortPrm(idc.INF_START_AF)
+    #analysis_flags = idc.GetShortPrm(idc.INF_START_AF)
+    analysis_flags = idc.get_inf_attr(idc.INF_AF)
     analysis_flags &= ~idc.AF_IMMOFF
     # 关闭启发式自动补正
-    idc.SetShortPrm(idc.INF_START_AF, analysis_flags)
+    idc.set_inf_attr(idc.INF_AF, analysis_flags)
+    # idc.SetShortPrm(idc.INF_START_AF, analysis_flags)
 
     # 修改提取结果的存储位置及名称
     # filePath = '/data/wangyongpan/paper/reuse_detection/datasets/paper_datasets/libsndfile-1.0.28-com-features/'
@@ -42,10 +46,10 @@ def extract_features():
     #     return
     
     # 开始处理
-    idaapi.autoWait()
-    cfgs = get_func_cfgs_c(FirstSeg())
+    ida_auto.auto_wait()
+    cfgs = get_func_cfgs_c(idc.get_first_seg())
     # 对cfgs进行处理
-    binaryName = idc.GetInputFilePath()
+    binaryName = idc.get_input_file_path()
     for nodes in cfgs.func_acfg_list:
         dict = {}
         dict["src"] = binaryName
@@ -59,7 +63,7 @@ def extract_features():
         dict["n_num"] = len(nodes.g)
         features = []
         for node in nodes.g.nodes():
-            features.append(nodes.g.node[node]['vec'])
+            features.append(nodes.g.nodes[node]['vec'])
             pass
         dict["features"] = list(features)
         dict["fname"] = nodes.funcName
@@ -68,7 +72,7 @@ def extract_features():
     time_end = strftime("%Y-%m-%d %H:%M:%S", gmtime())
     times[binaryName] = time_begin + "||" + time_end
     #saveJsonDocument(times, filePth + 'time.json')
-    idc.Exit(0)
+    ida_pro.qexit(0)
     return cfgs
 
 # 对提取出来的acfg进行json存储
