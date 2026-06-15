@@ -32,8 +32,7 @@ def embed_by_feat_torch(feat, gnn):
     return gnn.forward_once(X, mask).cpu().detach().numpy()
 
 def load_model(model_path="saved_model/gnn-best.pt"):
-    return torch.load(model_path)
-
+    return torch.load(model_path, weights_only=False)
 
 
 def get_child_node(start_node, graph):
