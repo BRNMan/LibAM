@@ -1,6 +1,5 @@
 import itertools
 import os, copy
-from turtle import Turtle
 import difflib
 import networkx as nx
 
