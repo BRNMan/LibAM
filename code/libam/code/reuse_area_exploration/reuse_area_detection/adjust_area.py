@@ -883,7 +883,7 @@ def adjust_in9(obj_func_embeddings_path, cdd_func_embeddings_path, target_fcgs_p
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     
-    gnn = torch.load(gnn_model_path)
+    gnn = torch.load(gnn_model_path, weights_only=False)
     gnn.cuda()
     fcgs = {}
     torch.multiprocessing.set_start_method('spawn', force=True)
@@ -955,7 +955,7 @@ def main(obj_func_embeddings_path, cdd_func_embeddings_path, target_fcgs_path, c
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     
-    gnn = torch.load(gnn_model_path)
+    gnn = torch.load(gnn_model_path, weights_only=False)
     gnn.cuda()
     fcgs = {}
     torch.multiprocessing.set_start_method('spawn', force=True)

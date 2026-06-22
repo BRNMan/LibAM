@@ -99,7 +99,7 @@ def main(obj_func_embeddings_path, cdd_func_embeddings_path, tar_fcgs_path, cand
     # fcgs_path = "/data/wangyongpan/paper/reuse_detection/datasets/paper_datasets/isrd_target_fcg/"
     # save_path = "/data/wangyongpan/paper/reuse_detection/datasets/results/libAE2.0_result/TPL_detection_result/1109_5_libae_paper_top50_gnn_analog_0.001/"
     # reinforment_path = "/data/wangyongpan/paper/reuse_detection/datasets/results/libAE2.0_result/TPL_detection_result/1109_5_libae_paper_top50/"
-    gnn = torch.load(gnn_model_path)
+    gnn = torch.load(gnn_model_path, weights_only=False)
     fcgs_num = {}
     torch.multiprocessing.set_start_method('spawn')
     for fcg_p in os.listdir(tar_fcgs_path):

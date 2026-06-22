@@ -32,7 +32,7 @@ def embed_by_feat_torch(feat, gnn):
     return gnn.forward_once(X, mask).cpu().detach().numpy()
 
 def load_model(model_path="saved_model/gnn-best.pt"):
-    return torch.load(model_path, weights_only=False)
+    return torch.load(model_path, weights_only=False, map_location='cuda')
 
 
 def get_child_node(start_node, graph):
@@ -139,7 +139,7 @@ def generate_subgraph(save_path, fcg_path, func_embedding_path, model_path):
     
     
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    gnn = torch.load(model_path)
+    gnn = torch.load(model_path, weights_only=False)
         
     # with open(fcg_path, "rb") as f:
     #     fcg = pickle.load(f)

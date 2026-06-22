@@ -708,7 +708,7 @@ def reuse_area_detection(tar_fcg_path, cdd_fcg_path, func_path, feature_save_pat
     #     if "bzip2" in object_item_list_item:
     #         object_item_list_temp.append(object_item_list_item)
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    gnn = torch.load(gnn_model_path)
+    gnn = torch.load(gnn_model_path, weights_only=False)
     fcgs_num = {}
     torch.multiprocessing.set_start_method('spawn', force=True)
     for fcg_p in os.listdir(tar_fcg_path):
@@ -1344,7 +1344,7 @@ def tpl_detection_fast(tar_fcg_path, cdd_fcg_path, func_path, feature_save_path,
     #     if "bzip2" in object_item_list_item:
     #         object_item_list_temp.append(object_item_list_item)
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    gnn = torch.load(gnn_model_path)
+    gnn = torch.load(gnn_model_path, weights_only=False)
     fcgs_num = {}
     torch.multiprocessing.set_start_method('spawn', force=True)
     for fcg_p in os.listdir(tar_fcg_path):

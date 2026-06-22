@@ -112,7 +112,7 @@ def main(obj_func_embeddings_path, cdd_func_embeddings_path, tar_fcgs_path, cand
     if not os.path.exists(timepath):
         os.makedirs(timepath)
     
-    gnn = torch.load(gnn_model_path)
+    gnn = torch.load(gnn_model_path, weights_only=False)
     fcgs_num = {}
     torch.multiprocessing.set_start_method('spawn', force=True)
     for fcg_p in os.listdir(tar_fcgs_path):

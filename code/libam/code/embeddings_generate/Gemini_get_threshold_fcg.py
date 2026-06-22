@@ -191,7 +191,7 @@ if __name__ == '__main__':
     testLoader = DataLoader(testSet, batch_size=1,
                             shuffle=False, num_workers=WORKERS, pin_memory=True)
 
-    net = torch.load("saved_model/fcg_gnn-best-0.01.pt")
+    net = torch.load("saved_model/fcg_gnn-best-0.01.pt", weights_only=False)
 
     net = net.cuda()
 
