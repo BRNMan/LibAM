@@ -81,7 +81,7 @@ def generate_afcg(save_path, fcg_path, func_embedding_path, model_path):
                 fcg_cache[bin_name] = pickle.load(f)
     
     # Process functions using cached FCGs
-    for bin_func in tqdm(func_embeddings):
+    for bin_func in tqdm(func_embeddings, desc="Generating AFCGs"):
         bin_name = bin_func.split("|||")[0]
         func_name = bin_func.split("|||")[1]
         if bin_name in fcg_cache:
@@ -162,7 +162,7 @@ def generate_subgraph(save_path, fcg_path, func_embedding_path, model_path):
             with open(os.path.join(fcg_path, bin_name+"_fcg.pkl"), "rb") as f:
                 fcg_cache[bin_name] = pickle.load(f)
 
-    for bin_func in tqdm(func_embeddings):
+    for bin_func in tqdm(func_embeddings, desc="Computing Subgraphs"):
         # if bin_func == "xz|||lzma_alone_encoder":
         #     print("warning")
         bin_name = bin_func.split("|||")[0]
@@ -223,7 +223,7 @@ def subfcg_embedding(TIME_PATH, test_gemini_feat_paths, savePath, model_path):
             # os.rmdir(savePath)
             os.makedirs(TIME_PATH)
     if not os.path.exists(savePath.replace("_in9_bl5", "_in9")):
-        for test_gemini_feat_path in tqdm(os.listdir(test_gemini_feat_paths), desc="it is generating func embeddings..."):
+        for test_gemini_feat_path in tqdm(os.listdir(test_gemini_feat_paths), desc="Generating Gemini function embeddings"):
             start = time.time()
             project_name = test_gemini_feat_path.split(".json")[0]
             with open(os.path.join(test_gemini_feat_paths, test_gemini_feat_path), 'r') as f:
