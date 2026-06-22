@@ -32,7 +32,7 @@ def tpl_detection_fast_one_annoy(
     area_save_path,
     tar_afcg_dict,
     cdd_afcg_dict,
-    tar_subgraph_dict,
+    tar_subgraph_path,
     cdd_subgraph_dict,
     tar_fcg_dict,
     cdd_fcg_dict,
@@ -43,6 +43,11 @@ def tpl_detection_fast_one_annoy(
 
         object_name = object_item.split("_reuse_func_dict")[0]
         object_fcg = tar_fcg_dict[object_name]
+        try:
+            with open(os.path.join(tar_subgraph_path, f"{object_name}_subgraph.json"), "r") as f:
+                tar_subgraph = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            continue
 
         object_cdd_func_dict = json.load(open(os.path.join(func_path, object_item), "r"))
         cdd_project_dict = get_cdd_func_dict(object_cdd_func_dict)
@@ -60,7 +65,7 @@ def tpl_detection_fast_one_annoy(
 
             if (
                 object_name in tar_afcg_dict
-                and object_name in tar_subgraph_dict
+                and tar_subgraph is not None
                 and candidate_name in cdd_afcg_dict
                 and candidate_name in cdd_subgraph_dict
             ):
@@ -78,7 +83,7 @@ def tpl_detection_fast_one_annoy(
                     fcgs_num,
                     tar_afcg_dict[object_name],
                     cdd_afcg_dict[candidate_name],
-                    tar_subgraph_dict[object_name],
+                    tar_subgraph,
                     cdd_subgraph_dict[candidate_name],
                 )
 
@@ -111,7 +116,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
     obj_com_funcs_dict,
     cdd_com_funcs_dict,
     tar_afcg_dict,
-    tar_subgraph_dict,
+    tar_subgraph_path,
     cdd_afcg_dict,
     cdd_subgraph_dict,
     area_save_path,
@@ -126,9 +131,6 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
 
     print(f"Worker {process_id} starting", flush=True)
     sys.stdout.flush()
-
-    with open(cdd_func_embeddings_path, "r") as f:
-        cdd_func_embeddings = json.load(f)
 
     for object_item in func_path_list:
         object_name = object_item.split("_reuse_func_dict")[0]
@@ -146,13 +148,21 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
             del object_fcg
             continue
 
+        try:
+            with open(os.path.join(tar_subgraph_path, f"{object_name}_subgraph.json"), "r") as f:
+                tar_subgraph = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            del object_fcg
+            del object_cdd_func_dict
+            continue
+
         cdd_project_dict = get_cdd_func_dict(object_cdd_func_dict)
         obj_com_funcs = obj_com_funcs_dict.get(object_name, [])
 
         for candidate_name in cdd_project_dict:
             if candidate_name not in cdd_com_funcs_dict:
                 continue
-            if object_name not in tar_afcg_dict or object_name not in tar_subgraph_dict:
+            if object_name not in tar_afcg_dict or tar_subgraph is None:
                 continue
             if candidate_name not in cdd_afcg_dict or candidate_name not in cdd_subgraph_dict:
                 continue
@@ -184,12 +194,11 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
                 candidate_fcg,
                 obj_com_funcs,
                 cdd_com_funcs,
-                cdd_func_embeddings,
                 gnn,
                 fcgs_num,
                 tar_afcg_dict[object_name],
                 cdd_afcg_dict[candidate_name],
-                tar_subgraph_dict[object_name],
+                tar_subgraph,
                 cdd_subgraph_dict[candidate_name],
             )
 
@@ -234,6 +243,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
         json.dump(reuse_result, open(result_path, "w"))
 
         del object_fcg
+        del tar_subgraph
         del object_cdd_func_dict
         del cdd_project_dict
         gc.collect()
@@ -273,11 +283,6 @@ def tpl_detection_fast_annoy_simple_with_logging(
     for tar_afcg_item in os.listdir(tar_afcg_path):
         tar_bin_name = tar_afcg_item.split("_afcg.json")[0]
         tar_afcg_dict[tar_bin_name] = json.load(open(os.path.join(tar_afcg_path, tar_afcg_item), "r"))
-
-    tar_subgraph_dict = {}
-    for tar_subgraph_item in os.listdir(tar_subgraph_path):
-        tar_bin_name = tar_subgraph_item.split("_subgraph.json")[0]
-        tar_subgraph_dict[tar_bin_name] = json.load(open(os.path.join(tar_subgraph_path, tar_subgraph_item), "r"))
 
     cdd_subgraph_files = sorted(os.listdir(cdd_subgraph_path))
 
@@ -344,7 +349,6 @@ def tpl_detection_fast_annoy_simple_with_logging(
                 cdd_afcg_dict[cdd_bin_name] = json.load(open(os.path.join(cdd_afcg_path, afcg_file), "r"))
             except (FileNotFoundError, json.JSONDecodeError):
                 continue
-
         cdd_subgraph_dict = {}
         for cdd_subgraph_item in phase_subgraph_files:
             cdd_bin_name = cdd_subgraph_item.split("_subgraph.json")[0]
@@ -391,7 +395,7 @@ def tpl_detection_fast_annoy_simple_with_logging(
                     obj_com_funcs_dict,
                     cdd_com_funcs_dict,
                     tar_afcg_dict,
-                    tar_subgraph_dict,
+                    tar_subgraph_path,
                     cdd_afcg_dict,
                     cdd_subgraph_dict,
                     area_save_path,
@@ -444,11 +448,6 @@ def tpl_detection_fast_annoy(
     for cdd_afcg_item in os.listdir(cdd_afcg_path):
         cdd_bin_name = cdd_afcg_item.split("_afcg.json")[0]
         cdd_afcg_dict[cdd_bin_name] = json.load(open(os.path.join(cdd_afcg_path, cdd_afcg_item), "r"))
-
-    tar_subgraph_dict = {}
-    for tar_subgraph_item in os.listdir(tar_subgraph_path):
-        tar_bin_name = tar_subgraph_item.split("_subgraph.json")[0]
-        tar_subgraph_dict[tar_bin_name] = json.load(open(os.path.join(tar_subgraph_path, tar_subgraph_item), "r"))
 
     cdd_subgraph_dict = {}
     for cdd_subgraph_item in os.listdir(cdd_subgraph_path):
@@ -530,7 +529,7 @@ def tpl_detection_fast_annoy(
                 area_save_path,
                 tar_afcg_dict,
                 cdd_afcg_dict,
-                tar_subgraph_dict,
+                tar_subgraph_path,
                 cdd_subgraph_dict,
                 tar_fcg_dict,
                 cdd_fcg_dict,

@@ -9,12 +9,11 @@ def tpl_detection_fast_core_annoy(
     candidate_graph,
     obj_com_funcs,
     cdd_com_funcs,
-    cdd_func_embeddings,
     gnn,
     fcgs_num,
     tar_afcg_dict,
     cdd_afcg_dict,
-    tar_subgraph_dict,
+    tar_subgraph,
     cdd_subgraph_dict,
 ):
     matched_func_ingraph_list = judge_in_graph(object_graph, candidate_graph, matched_func_list)
@@ -26,11 +25,10 @@ def tpl_detection_fast_core_annoy(
         candidate_graph,
         obj_com_funcs,
         cdd_com_funcs,
-        cdd_func_embeddings,
         gnn,
         fcgs_num,
         tar_afcg_dict,
         cdd_afcg_dict,
-        tar_subgraph_dict,
+        tar_subgraph,
         cdd_subgraph_dict,
     )

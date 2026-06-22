@@ -138,12 +138,11 @@ def tpl_detection_fast_utils_annoy_v2(
     candidate_graph,
     obj_com_funcs,
     cdd_com_funcs,
-    func_embeddings,
     gnn,
     fcgs_num,
     tar_afcg_dict,
     cdd_afcg_dict,
-    tar_subgraph_dict,
+    tar_subgraph,
     cdd_subgraph_dict,
 ):
     reuse_flag = False
@@ -189,7 +188,7 @@ def tpl_detection_fast_utils_annoy_v2(
         if func_pair[1] in black_list:
             continue
 
-        obj_fcg = tar_subgraph_dict[func_pair[0]]
+        obj_fcg = tar_subgraph[func_pair[0]]
         cdd_fcg = cdd_subgraph_dict[func_pair[1]]
 
         obj_embedding = torch.tensor(obj_fcg["embedding"])
