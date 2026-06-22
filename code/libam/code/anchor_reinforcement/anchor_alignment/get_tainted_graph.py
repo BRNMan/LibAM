@@ -1223,6 +1223,359 @@ def tpl_detection_fast_annoy_1_5(tar_fcg_path, cdd_fcg_path, func_path, feature_
     for p in p_list:
         p.join()
 
+def tpl_detection_fast_one_annoy_simple_with_logging(func_path_list, tar_fcg_path, cdd_fcg_path, func_path, 
+                                                      feature_save_path, time_path, com_funcs_path, sim_funcs_path, 
+                                                      gnn, fcgs_num, obj_com_funcs_dict, 
+                                                      cdd_com_funcs_dict, tar_afcg_dict, tar_subgraph_dict, 
+                                                      cdd_afcg_dict, cdd_subgraph_dict, area_save_path,
+                                                      cdd_func_embeddings_path, process_id, memory_log_path):
+    """
+    Worker with memory logging written to disk (no queue deadlock).
+    """
+    import psutil
+    import os
+    import sys
+    
+    process = psutil.Process(os.getpid())
+    memory_log = []
+    
+    print(f"Worker {process_id} starting", flush=True)
+    sys.stdout.flush()
+    
+    with open(cdd_func_embeddings_path, "r") as f:
+        cdd_func_embeddings = json.load(f)
+    
+    for object_item in func_path_list:
+        object_name = object_item.split("_reuse_func_dict")[0]
+        reuse_result = {object_name: []}
+
+        mem_start = process.memory_info().rss / 1024 / 1024
+        
+        try:
+            with open(os.path.join(tar_fcg_path, f"{object_name}_fcg.pkl"), "rb") as f:
+                object_fcg = pickle.load(f)
+        except FileNotFoundError:
+            continue
+        
+        mem_after_tar_load = process.memory_info().rss / 1024 / 1024
+        
+        try:
+            object_cdd_func_dict = json.load(open(os.path.join(func_path, object_item), "r"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            del object_fcg
+            continue
+        
+        cdd_project_dict = get_cdd_func_dict(object_cdd_func_dict)
+        obj_com_funcs = obj_com_funcs_dict.get(object_name, [])
+        
+        for candidate_name in cdd_project_dict:
+            if candidate_name not in cdd_com_funcs_dict:
+                continue
+            if object_name not in tar_afcg_dict or object_name not in tar_subgraph_dict:
+                continue
+            if candidate_name not in cdd_afcg_dict or candidate_name not in cdd_subgraph_dict:
+                continue
+            
+            mem_before_cdd_load = process.memory_info().rss / 1024 / 1024
+            
+            cdd_com_funcs = cdd_com_funcs_dict.get(candidate_name, [])
+            matched_func_list = cdd_project_dict[candidate_name]
+            
+            json.dump(matched_func_list, open(os.path.join(sim_funcs_path, 
+                     f"{object_name}___{candidate_name}.json"), "w"))
+            
+            try:
+                with open(os.path.join(cdd_fcg_path, f"{candidate_name}_fcg.pkl"), "rb") as f:
+                    candidate_fcg = pickle.load(f)
+            except FileNotFoundError:
+                continue
+            
+            mem_after_cdd_load = process.memory_info().rss / 1024 / 1024
+            
+            mem_before_detection = process.memory_info().rss / 1024 / 1024
+            
+            reuse_flag, reuse_dict = tpl_detection_fast_core_annoy(
+                object_name, candidate_name, object_fcg, matched_func_list, 
+                candidate_fcg, obj_com_funcs, cdd_com_funcs, cdd_func_embeddings, 
+                gnn, fcgs_num, tar_afcg_dict[object_name], cdd_afcg_dict[candidate_name], 
+                tar_subgraph_dict[object_name], cdd_subgraph_dict[candidate_name])
+            
+            mem_after_detection = process.memory_info().rss / 1024 / 1024
+            
+            if reuse_flag:
+                reuse_result[object_name].append(candidate_name)
+                with open(os.path.join(area_save_path, 
+                         f"{object_name}___{candidate_name}_feature_result.json"), "w") as ff:
+                    json.dump(reuse_dict, ff)
+            
+            mem_after_save = process.memory_info().rss / 1024 / 1024
+            
+            # Log this iteration
+            memory_log.append({
+                "process_id": process_id,
+                "object_name": object_name,
+                "candidate_name": candidate_name,
+                "delta_cdd_load": mem_after_cdd_load - mem_before_cdd_load,
+                "delta_detection": mem_after_detection - mem_before_detection,
+                "delta_save": mem_after_save - mem_after_detection,
+                "peak_mem": mem_after_detection,
+            })
+            
+            del candidate_fcg
+            del reuse_dict
+            gc.collect()
+
+        result_path = os.path.join(feature_save_path, f"{object_name}_reuse_result.json")
+
+        # Merge with any results already written by a previous phase
+        if os.path.exists(result_path):
+            try:
+                with open(result_path, "r") as f:
+                    existing = json.load(f)
+                for k, v in existing.items():
+                    if k not in reuse_result:
+                        reuse_result[k] = v
+                    else:
+                        # Merge candidate lists without duplicates
+                        reuse_result[k] = list(set(reuse_result[k]) | set(v))
+            except (json.JSONDecodeError, KeyError):
+                pass  # corrupt or empty file, just overwrite
+
+        json.dump(reuse_result, open(result_path, "w"))
+        
+        del object_fcg
+        del object_cdd_func_dict
+        del cdd_project_dict
+        gc.collect()
+    
+    # Write memory log to disk (no queue)
+    print(f"Worker {process_id} writing memory log to {memory_log_path}_{process_id}.json", flush=True)
+    sys.stdout.flush()
+    with open(f"{memory_log_path}_{process_id}.json", "w") as f:
+        json.dump(memory_log, f, indent=2)
+    
+    print(f"Worker {process_id} done", flush=True)
+    sys.stdout.flush()
+
+def tpl_detection_fast_annoy_simple_with_logging(tar_fcg_path, cdd_fcg_path, func_path,
+                                                  feature_save_path, area_save_path, time_path,
+                                                  com_funcs_path, sim_funcs_path,
+                                                  obj_func_embeddings_path, cdd_func_embeddings_path,
+                                                  gnn_model_path, tar_afcg_path, cdd_afcg_path,
+                                                  tar_subgraph_path, cdd_subgraph_path):
+    """
+    Phase-based processing with memory diagnostics.
+    """
+    import gc
+    import psutil
+    import sys
+
+    main_process = psutil.Process(os.getpid())
+
+    object_item_list = os.listdir(func_path)
+
+    print("Loading target metadata...", flush=True)
+    tar_afcg_dict = {}
+    for tar_afcg_item in os.listdir(tar_afcg_path):
+        tar_bin_name = tar_afcg_item.split("_afcg.json")[0]
+        tar_afcg_dict[tar_bin_name] = json.load(open(os.path.join(tar_afcg_path, tar_afcg_item), "r"))
+
+    tar_subgraph_dict = {}
+    for tar_subgraph_item in os.listdir(tar_subgraph_path):
+        tar_bin_name = tar_subgraph_item.split("_subgraph.json")[0]
+        tar_subgraph_dict[tar_bin_name] = json.load(open(os.path.join(tar_subgraph_path, tar_subgraph_item), "r"))
+
+    cdd_subgraph_files = sorted(os.listdir(cdd_subgraph_path))
+    print(f"Found {len(cdd_subgraph_files)} candidates to process")
+
+    for path in [feature_save_path, area_save_path, sim_funcs_path, time_path]:
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+    print("Pre-computing FCG node counts...", flush=True)
+    fcgs_num = {}
+    for fcg_p in os.listdir(tar_fcg_path):
+        try:
+            with open(os.path.join(tar_fcg_path, fcg_p), "rb") as f:
+                fcg = pickle.load(f)
+            fcg_name = fcg_p.split("_fcg.pkl")[0]
+            fcgs_num[fcg_name] = len(list(fcg.nodes()))
+            del fcg
+        except (FileNotFoundError, pickle.PickleError):
+            continue
+
+    for fcg_p in os.listdir(cdd_fcg_path):
+        try:
+            with open(os.path.join(cdd_fcg_path, fcg_p), "rb") as f:
+                fcg = pickle.load(f)
+            fcg_name = fcg_p.split("_fcg.pkl")[0]
+            fcgs_num[fcg_name] = len(list(fcg.nodes()))
+            del fcg
+        except (FileNotFoundError, pickle.PickleError):
+            continue
+
+    gc.collect()
+
+    print("Loading metadata...", flush=True)
+    obj_com_funcs_file = json.load(open(os.path.join(com_funcs_path, "target_in9_embedding.json"))).keys()
+    cdd_com_funcs_file = json.load(open(os.path.join(com_funcs_path, "candidate_in9_embedding.json"))).keys()
+
+    obj_com_funcs_dict = {}
+    for obj_item in obj_com_funcs_file:
+        if obj_item.split("|||")[0] not in obj_com_funcs_dict:
+            obj_com_funcs_dict[obj_item.split("|||")[0]] = []
+        if obj_item.split("|||")[1] not in obj_com_funcs_dict[obj_item.split("|||")[0]]:
+            obj_com_funcs_dict[obj_item.split("|||")[0]].append(obj_item.split("|||")[1])
+
+    cdd_com_funcs_dict = {}
+    for cdd_item in cdd_com_funcs_file:
+        if cdd_item.split("|||")[0] not in cdd_com_funcs_dict:
+            cdd_com_funcs_dict[cdd_item.split("|||")[0]] = []
+        if cdd_item.split("|||")[1] not in cdd_com_funcs_dict[cdd_item.split("|||")[0]]:
+            cdd_com_funcs_dict[cdd_item.split("|||")[0]].append(cdd_item.split("|||")[1])
+
+    gnn = False
+
+    CANDIDATES_PER_PHASE = 3
+    num_phases = (len(cdd_subgraph_files) + CANDIDATES_PER_PHASE - 1) // CANDIDATES_PER_PHASE
+
+    print(f"\nProcessing {num_phases} phases with memory diagnostics", flush=True)
+    print("="*70, flush=True)
+
+    memory_log_base = os.path.join(time_path, "worker_memory")
+    phase_memory_log = []
+
+    for phase in range(num_phases):
+        print(f"\n[Phase {phase + 1}/{num_phases}]", flush=True)
+
+        phase_start = phase * CANDIDATES_PER_PHASE
+        phase_end = min((phase + 1) * CANDIDATES_PER_PHASE, len(cdd_subgraph_files))
+        phase_subgraph_files = cdd_subgraph_files[phase_start:phase_end]
+
+        print(f"Loading {len(phase_subgraph_files)} candidate subgraphs...", flush=True)
+        mem_before_load = main_process.memory_info().rss / 1024 / 1024
+
+        cdd_afcg_dict = {}
+        cdd_afcg_total_size = 0
+        for cdd_subgraph_item in phase_subgraph_files:
+            cdd_bin_name = cdd_subgraph_item.split("_subgraph.json")[0]
+            afcg_file = f"{cdd_bin_name}_afcg.json"
+            try:
+                data = json.load(open(os.path.join(cdd_afcg_path, afcg_file), "r"))
+                cdd_afcg_dict[cdd_bin_name] = data
+                # Estimate size
+                cdd_afcg_total_size += len(str(data)) / 1024 / 1024
+            except (FileNotFoundError, json.JSONDecodeError):
+                continue
+
+        cdd_subgraph_dict = {}
+        cdd_subgraph_total_size = 0
+        for cdd_subgraph_item in phase_subgraph_files:
+            cdd_bin_name = cdd_subgraph_item.split("_subgraph.json")[0]
+            try:
+                data = json.load(open(os.path.join(cdd_subgraph_path, cdd_subgraph_item), "r"))
+                cdd_subgraph_dict[cdd_bin_name] = data
+                # Estimate size
+                cdd_subgraph_total_size += len(str(data)) / 1024 / 1024
+            except (FileNotFoundError, json.JSONDecodeError):
+                continue
+
+        mem_after_load = main_process.memory_info().rss / 1024 / 1024
+        mem_delta_load = mem_after_load - mem_before_load
+
+        print(f"  Loaded {len(cdd_afcg_dict)} AFCG (est. {cdd_afcg_total_size:.2f} MB)")
+        print(f"  Loaded {len(cdd_subgraph_dict)} subgraph (est. {cdd_subgraph_total_size:.2f} MB)")
+        print(f"  Memory delta: {mem_delta_load:.2f} MB (before: {mem_before_load:.2f}, after: {mem_after_load:.2f})")
+
+        # Find largest entries
+        if cdd_subgraph_dict:
+            subgraph_sizes = [(k, len(str(v)) / 1024 / 1024) for k, v in cdd_subgraph_dict.items()]
+            subgraph_sizes.sort(key=lambda x: x[1], reverse=True)
+            print(f"  Top 3 largest subgraphs:")
+            for name, size in subgraph_sizes[:3]:
+                print(f"    {name}: {size:.2f} MB")
+
+        if cdd_afcg_dict:
+            afcg_sizes = [(k, len(str(v)) / 1024 / 1024) for k, v in cdd_afcg_dict.items()]
+            afcg_sizes.sort(key=lambda x: x[1], reverse=True)
+            print(f"  Top 3 largest AFCG:")
+            for name, size in afcg_sizes[:3]:
+                print(f"    {name}: {size:.2f} MB")
+
+        phase_memory_log.append({
+            "phase": phase + 1,
+            "num_candidates": len(phase_subgraph_files),
+            "mem_before_mb": mem_before_load,
+            "mem_after_mb": mem_after_load,
+            "delta_mb": mem_delta_load,
+            "estimated_afcg_mb": cdd_afcg_total_size,
+            "estimated_subgraph_mb": cdd_subgraph_total_size,
+            "estimated_total_mb": cdd_afcg_total_size + cdd_subgraph_total_size,
+        })
+
+        print(f"Starting workers for phase {phase + 1}...", flush=True)
+
+        p_list = []
+        Process_num = 2 
+
+        ctx = multiprocessing.get_context('fork')
+
+        for i in range(Process_num):
+            start_idx = int((i / Process_num) * len(object_item_list))
+            end_idx = int(((i + 1) / Process_num) * len(object_item_list))
+            func_path_slice = object_item_list[start_idx:end_idx]
+
+            if len(func_path_slice) == 0:
+                continue
+
+            p = ctx.Process(target=tpl_detection_fast_one_annoy_simple_with_logging,
+                           args=(func_path_slice, tar_fcg_path, cdd_fcg_path, func_path,
+                                 feature_save_path, time_path, com_funcs_path, sim_funcs_path,
+                                 gnn, fcgs_num, obj_com_funcs_dict,
+                                 cdd_com_funcs_dict, tar_afcg_dict, tar_subgraph_dict,
+                                 cdd_afcg_dict, cdd_subgraph_dict, area_save_path,
+                                 cdd_func_embeddings_path, i, memory_log_base))
+            p_list.append(p)
+            p.start()
+
+        for idx, p in enumerate(p_list):
+            p.join()
+
+        for p in p_list:
+            p.close()
+
+        p_list.clear()
+
+        print(f"Phase {phase + 1} complete.", flush=True)
+        mem_before_cleanup = main_process.memory_info().rss / 1024 / 1024
+
+        del cdd_afcg_dict
+        del cdd_subgraph_dict
+        gc.collect()
+
+        mem_after_cleanup = main_process.memory_info().rss / 1024 / 1024
+        print(f"Memory after cleanup: {mem_after_cleanup:.2f} MB (freed {mem_before_cleanup - mem_after_cleanup:.2f} MB)")
+
+    # Write phase memory log
+    with open(os.path.join(time_path, "phase_memory_profile.json"), "w") as f:
+        json.dump(phase_memory_log, f, indent=2)
+
+    # Print summary
+    print("\n" + "="*70)
+    print("PHASE MEMORY SUMMARY")
+    print("="*70)
+    print(f"{'Phase':6s} {'Candidates':12s} {'Est. Size':12s} {'Actual Delta':12s} {'Ratio':10s}")
+    print("-" * 60)
+
+    for log in phase_memory_log:
+        est = log["estimated_total_mb"]
+        actual = log["delta_mb"]
+        ratio = actual / est if est > 0 else 0
+        print(f"{log['phase']:6d} {log['num_candidates']:12d} {est:12.2f} MB {actual:12.2f} MB {ratio:10.2f}x")
+
+import multiprocessing
+import gc
+
 
 def tpl_detection_fast_annoy(tar_fcg_path, cdd_fcg_path, func_path, feature_save_path, area_save_path, time_path, com_funcs_path, sim_funcs_path, obj_func_embeddings_path, cdd_func_embeddings_path, gnn_model_path, tar_afcg_path, cdd_afcg_path, tar_subgraph_path, cdd_subgraph_path):
     cal_time = {}
