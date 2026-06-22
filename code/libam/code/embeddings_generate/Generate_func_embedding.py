@@ -71,15 +71,21 @@ def generate_afcg(save_path, fcg_path, func_embedding_path, model_path):
         func_embeddings = json.load(f)
     
     all_acfg = {}
-        
-        
-        
+    
+    # Pre-load all FCGs once to avoid repeated disk I/O
+    fcg_cache = {}
+    for bin_func in func_embeddings:
+        bin_name = bin_func.split("|||")[0]
+        if bin_name not in fcg_cache and not os.path.exists(os.path.join(save_path, bin_name+"_afcg.json")):
+            with open(os.path.join(fcg_path, bin_name+"_fcg.pkl"), "rb") as f:
+                fcg_cache[bin_name] = pickle.load(f)
+    
+    # Process functions using cached FCGs
     for bin_func in tqdm(func_embeddings):
         bin_name = bin_func.split("|||")[0]
         func_name = bin_func.split("|||")[1]
-        if not os.path.exists(os.path.join(save_path, bin_name+"_afcg.json")):
-            with open(os.path.join(fcg_path, bin_name+"_fcg.pkl"), "rb") as f:
-                fcg = pickle.load(f)
+        if bin_name in fcg_cache:
+            fcg = fcg_cache[bin_name]
             
             walked_map_set = set()
             child_node_list = get_children_list(func_name, fcg, walked_map_set)
@@ -147,15 +153,22 @@ def generate_subgraph(save_path, fcg_path, func_embedding_path, model_path):
         func_embeddings = json.load(f)
     
     all_subgraph = {}
+    
+    # Pre-load all FCGs once to avoid repeated disk I/O
+    fcg_cache = {}
+    for bin_func in func_embeddings:
+        bin_name = bin_func.split("|||")[0]
+        if bin_name not in fcg_cache and not os.path.exists(os.path.join(save_path, bin_name+"_subgraph.json")):
+            with open(os.path.join(fcg_path, bin_name+"_fcg.pkl"), "rb") as f:
+                fcg_cache[bin_name] = pickle.load(f)
 
     for bin_func in tqdm(func_embeddings):
         # if bin_func == "xz|||lzma_alone_encoder":
         #     print("warning")
         bin_name = bin_func.split("|||")[0]
         func_name = bin_func.split("|||")[1]
-        if not os.path.exists(os.path.join(save_path, bin_name+"_subgraph.json")):
-            with open(os.path.join(fcg_path, bin_name+"_fcg.pkl"), "rb") as f:
-                fcg = pickle.load(f)
+        if bin_name in fcg_cache:
+            fcg = fcg_cache[bin_name]
 
             subgraph = {}
             subgraph["feature"] = []
@@ -187,11 +200,12 @@ def generate_subgraph(save_path, fcg_path, func_embedding_path, model_path):
                 all_subgraph[bin_name] = {}
             all_subgraph[bin_name][func_name] = subgraph
             
-    for bin_name in all_subgraph:
-        json.dump(all_subgraph[bin_name], open(os.path.join(save_path, bin_name+"_subgraph.json"), "w"))
+            # Check if all functions for this binary have been processed
+            bin_func_count = sum(1 for f in func_embeddings if f.split("|||")[0] == bin_name)
+            if len(all_subgraph[bin_name]) == bin_func_count:
+                json.dump(all_subgraph[bin_name], open(os.path.join(save_path, bin_name+"_subgraph.json"), "w"))
+                del all_subgraph[bin_name]  # Free memory after dumping
 
-        
-        
         
 
 def subfcg_embedding(TIME_PATH, test_gemini_feat_paths, savePath, model_path):
