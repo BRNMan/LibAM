@@ -199,7 +199,7 @@ def func_compare_annoy(object_path, candidate_path, score_opath, score_opath2, t
 
 def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path):
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
-    for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="all target bianry process..."):
+    for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="all target binary process..."):
         if detect_binary in detect_binary_func_vec and not os.path.exists(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json")):
             # 
         # if "ASUS__AC68U_30043762048__cp" in detect_binary:
