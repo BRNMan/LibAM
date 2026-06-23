@@ -200,5 +200,5 @@ def main():
         print(f"Heatmap: {heatmap_written}")
 
 
-if __name__ == "__main__":
-    main()
+
+main()
