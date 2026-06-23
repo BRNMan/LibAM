@@ -77,7 +77,7 @@ def cli():
     # # 4. TPL detection
     # print("start fast TPL detection......")
     save_path = "6_tpl_fast_result/"
-    anchor_reinforcement_module.tpl_detection_fast_annoy(os.path.join(DATA_PATH, "2_target/fcg"),
+    anchor_reinforcement_module.tpl_detection_fast_annoy_simple_with_logging(os.path.join(DATA_PATH, "2_target/fcg"),
                         os.path.join(DATA_PATH, "3_candidate/fcg"), 
                         os.path.join(DATA_PATH, "5_func_compare_result/score/"), 
                         os.path.join(DATA_PATH, save_path+"tpl_fast_result"), 

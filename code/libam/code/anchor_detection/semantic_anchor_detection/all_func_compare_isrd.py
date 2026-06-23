@@ -116,7 +116,7 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                 all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
                 
             candidate_bin_dict = {}
-            for target_funcname in tqdm.tqdm(detect_func_vec_dict, desc=f"\t Detecting candidate anchors in {detect_binary}"):
+            for target_funcname in tqdm.tqdm(detect_func_vec_dict, desc=f"\t Detecting candidate anchors in {detect_binary}", position=0, leave=True):
                 if target_funcname not in black_func_list:
                     query_result, distance_result = t.get_nns_by_vector(detect_func_vec_dict[target_funcname].tolist()[0], 100, include_distances=True)
                     for i in range(len(query_result)):
@@ -177,7 +177,6 @@ def func_compare_annoy_fast_multi(object_path, candidate_path, score_opath, scor
 
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
     save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_list, f=64, n_trees=100)
-    
     
     p_list = []
     Process_num = max(1, int(os.environ.get("LIBAM_COMPARE_PROCESSES", "1")))
