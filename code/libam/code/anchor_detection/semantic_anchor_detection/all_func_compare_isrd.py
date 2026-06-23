@@ -43,6 +43,27 @@ def select_diverse_top_matches(func_score_dict, top_k=100, per_binary_cap=20):
     return selected
 
 
+def select_global_top_matches(selected_items, max_total=50000, per_candidate_cap=5000):
+    """
+    Apply a second-stage global cap after per-function selection.
+    This keeps output size bounded even when a target binary has many functions.
+    """
+    final_items = []
+    per_candidate_count = {}
+
+    for match_key, score in sorted(selected_items, key=lambda d: d[1]):
+        candidate_binary = match_key.split("||||", 1)[1].split("----", 1)[0]
+        used = per_candidate_count.get(candidate_binary, 0)
+        if used >= per_candidate_cap:
+            continue
+        final_items.append((match_key, score))
+        per_candidate_count[candidate_binary] = used + 1
+        if len(final_items) >= max_total:
+            break
+
+    return final_items
+
+
 def _safe_json_dump(data, path):
     tmp_path = path + ".tmp"
     with open(tmp_path, "w") as f:
@@ -94,7 +115,13 @@ def save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_l
 
 def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path):
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
-    enable_diag = True
+    enable_diag = os.environ.get("LIBAM_COMPARE_DIAG", "1") == "1"
+    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "100")))
+    dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.058"))
+    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "20")))
+    per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "5")))
+    max_total = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_TOTAL", "5000")))
+    per_cdd_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_PER_CDD_BIN", "500")))
     for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="Target Binary Progress"):
         if detect_binary in detect_binary_func_vec and not os.path.exists(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json")):
             time_dict = {}
@@ -117,23 +144,41 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                 
             candidate_bin_dict = {}
             for target_funcname in tqdm.tqdm(detect_func_vec_dict, desc=f"\t Detecting candidate anchors in {detect_binary}", position=0, leave=True):
-                if target_funcname not in black_func_list:
-                    query_result, distance_result = t.get_nns_by_vector(detect_func_vec_dict[target_funcname].tolist()[0], 100, include_distances=True)
-                    for i in range(len(query_result)):
-                        if distance_result[i] < 1.058:#0.7483:
-                            if target_funcname not in score_dict:
-                                score_dict[target_funcname] = {}
-                            score_dict[target_funcname][all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
-                            raw_score_dict[detect_binary+"----"+target_funcname+"||||"+all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
-                        else:
-                            break
+                if target_funcname in black_func_list:
+                    continue
+                query_result, distance_result = t.get_nns_by_vector(
+                    detect_func_vec_dict[target_funcname].tolist()[0],
+                    ann_top_n,
+                    include_distances=True,
+                )
+                for i in range(len(query_result)):
+                    if distance_result[i] < dist_threshold:#0.7483:
+                        if target_funcname not in score_dict:
+                            score_dict[target_funcname] = {}
+                        score_dict[target_funcname][all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
+                        raw_score_dict[detect_binary+"----"+target_funcname+"||||"+all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
+                    else:
+                        break
                         
             selected_candidate_bins = set()
+            pre_global_selected = []
             for detect_func in score_dict:
-                object_cdd_func_list = select_diverse_top_matches(score_dict[detect_func], top_k=100, per_binary_cap=20)
+                object_cdd_func_list = select_diverse_top_matches(
+                    score_dict[detect_func],
+                    top_k=topk_per_func,
+                    per_binary_cap=per_bin_cap,
+                )
                 for object_cdd_func_item in object_cdd_func_list:
-                    deal_score_dict[detect_binary+"----"+detect_func+"||||"+object_cdd_func_item[0]] = object_cdd_func_item[1]
+                    match_key = detect_binary+"----"+detect_func+"||||"+object_cdd_func_item[0]
+                    pre_global_selected.append((match_key, object_cdd_func_item[1]))
                     selected_candidate_bins.add(object_cdd_func_item[0].split("----", 1)[0])
+
+            for match_key, score in select_global_top_matches(
+                pre_global_selected,
+                max_total=max_total,
+                per_candidate_cap=per_cdd_bin_cap,
+            ):
+                deal_score_dict[match_key] = score
 
             if enable_diag:
                 raw_candidate_bins = set()
@@ -141,13 +186,20 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                     for match_key in score_dict[func_name]:
                         raw_candidate_bins.add(match_key.split("----", 1)[0])
                 print(
-                    "[diag] {}: raw_bins={} selected_bins={} raw_pairs={} selected_pairs={} matched_funcs={}".format(
+                    "[diag] {}: raw_bins={} selected_bins={} raw_pairs={} pre_global_selected={} selected_pairs={} matched_funcs={} ann_top_n={} dist_th={} topk_per_func={} per_bin_cap={} max_total={} per_cdd_bin_cap={}".format(
                         detect_binary,
                         len(raw_candidate_bins),
                         len(selected_candidate_bins),
                         len(raw_score_dict),
+                        len(pre_global_selected),
                         len(deal_score_dict),
                         len(score_dict),
+                        ann_top_n,
+                        dist_threshold,
+                        topk_per_func,
+                        per_bin_cap,
+                        max_total,
+                        per_cdd_bin_cap,
                     )
                 )
             end = time.time()
