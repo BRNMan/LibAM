@@ -79,7 +79,7 @@ def cli():
     save_path = "6_tpl_fast_result/"
     # Default to top-k pruned anchors for faster TPL detection.
     # Override with LIBAM_TPL_SCORE_DIR=score when full recall analysis is needed.
-    tpl_score_dir = os.environ.get("LIBAM_TPL_SCORE_DIR", "score_top50")
+    tpl_score_dir = os.environ.get("LIBAM_TPL_SCORE_DIR", "top_scores")
     anchor_reinforcement_module.tpl_detection_fast_annoy_simple_with_logging(os.path.join(DATA_PATH, "2_target/fcg"),
                         os.path.join(DATA_PATH, "3_candidate/fcg"), 
                         os.path.join(DATA_PATH, "5_func_compare_result", tpl_score_dir) + "/", 

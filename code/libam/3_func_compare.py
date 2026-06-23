@@ -68,7 +68,7 @@ def cli():
     anchor_detection_module.func_compare_annoy_fast_multi(os.path.join(DATA_PATH, "4_embedding/target_in9_embedding.json"), 
         os.path.join(DATA_PATH, "4_embedding/candidate_in9_embedding.json"), 
         os.path.join(DATA_PATH, "5_func_compare_result/score"), 
-        os.path.join(DATA_PATH, "5_func_compare_result/score_top50"), 
+        os.path.join(DATA_PATH, "5_func_compare_result/top_scores"), 
         os.path.join(DATA_PATH, "5_func_compare_result"),
         os.path.join(DATA_PATH, "5_func_compare_result/embedding_annoy"))
    
