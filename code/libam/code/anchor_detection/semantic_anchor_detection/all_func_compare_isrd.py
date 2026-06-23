@@ -43,14 +43,60 @@ def select_diverse_top_matches(func_score_dict, top_k=100, per_binary_cap=20):
     return selected
 
 
+def _safe_json_dump(data, path):
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w") as f:
+        json.dump(data, f)
+    os.replace(tmp_path, path)
+
+
+def save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_list, f=64, n_trees=100):
+    ann_path = os.path.join(embed_path, "all_candidate.ann")
+    func_path = os.path.join(embed_path, "all_candidate_func.json")
+    bin_path = os.path.join(embed_path, "all_candidate_bin.json")
+
+    # Try using existing cache first.
+    if os.path.exists(ann_path) and os.path.exists(func_path) and os.path.exists(bin_path):
+        try:
+            t = AnnoyIndex(f, 'angular')
+            t.load(ann_path)
+            json.load(open(func_path, "r"))
+            json.load(open(bin_path, "r"))
+            return
+        except Exception:
+            # Corrupted or incompatible cache; rebuild.
+            for p in (ann_path, func_path, bin_path):
+                if os.path.exists(p):
+                    os.remove(p)
+
+    t = AnnoyIndex(f, 'angular')
+    all_candidate_id_func_dict = {}
+    all_candidate_id_bin_dict = {}
+    i = 0
+    for candidate_binary in tqdm.tqdm(candidate_binary_func_vec, desc="Building all_candidate Annoy index"):
+        candidate_func_vec_dict = candidate_binary_func_vec[candidate_binary]
+        for func_name in candidate_func_vec_dict:
+            if func_name not in black_func_list:
+                all_candidate_id_func_dict[str(i)] = func_name
+                all_candidate_id_bin_dict[str(i)] = candidate_binary
+                t.add_item(i, candidate_func_vec_dict[func_name].tolist()[0])
+                i += 1
+
+    t.build(n_trees)
+
+    tmp_ann_path = ann_path + ".tmp"
+    t.save(tmp_ann_path)
+    os.replace(tmp_ann_path, ann_path)
+    _safe_json_dump(all_candidate_id_func_dict, func_path)
+    _safe_json_dump(all_candidate_id_bin_dict, bin_path)
+
+
 
 def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path):
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
     enable_diag = True
     for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="Target Binary Progress"):
         if detect_binary in detect_binary_func_vec and not os.path.exists(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json")):
-            # 
-        # if "ASUS__AC68U_30043762048__cp" in detect_binary:
             time_dict = {}
             start = time.time()
             score_dict = {}
@@ -64,23 +110,10 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                 all_candidate_id_func_dict = json.load(open(os.path.join(embed_path, "all_candidate_func.json"), "r"))
                 all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
             else:
-                all_candidate_id_func_dict = {}
-                all_candidate_id_bin_dict = {}
-                i = 0
-                for candidate_binary in tqdm.tqdm(candidate_binary_func_vec, desc="Loading all candidate function vectors"):
-                    candidate_func_vec_dict =  candidate_binary_func_vec[candidate_binary]
-                    for func_name in candidate_func_vec_dict:
-                        if func_name not in black_func_list:
-                            all_candidate_id_func_dict[str(i)] = func_name
-                            all_candidate_id_bin_dict[str(i)] = candidate_binary
-                            t.add_item(i, candidate_func_vec_dict[func_name].tolist()[0])
-                            i += 1
-                
-                t.build(100) # 10 trees
-
-                t.save(os.path.join(embed_path, "all_candidate.ann"))
-                json.dump(all_candidate_id_func_dict, open(os.path.join(embed_path, "all_candidate_func.json"), "w"))
-                json.dump(all_candidate_id_bin_dict, open(os.path.join(embed_path, "all_candidate_bin.json"), "w"))
+                save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_list, f=64, n_trees=100)
+                t.load(os.path.join(embed_path, "all_candidate.ann"))
+                all_candidate_id_func_dict = json.load(open(os.path.join(embed_path, "all_candidate_func.json"), "r"))
+                all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
                 
             candidate_bin_dict = {}
             for target_funcname in tqdm.tqdm(detect_func_vec_dict, desc=f"\t Detecting candidate anchors in {detect_binary}"):
@@ -141,10 +174,26 @@ def func_compare_annoy_fast_multi(object_path, candidate_path, score_opath, scor
         os.makedirs(time_opath)
     if False == os.path.exists(embed_path):
         os.makedirs(embed_path)
+
+    black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
+    save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_list, f=64, n_trees=100)
     
     
     p_list = []
-    Process_num = 35
+    Process_num = max(1, int(os.environ.get("LIBAM_COMPARE_PROCESSES", "1")))
+
+    if Process_num == 1:
+        func_compare_annoy_fast_one(
+            detect_binary_func_vec_list,
+            detect_binary_func_vec,
+            candidate_binary_func_vec,
+            score_opath,
+            score_opath2,
+            time_opath,
+            embed_path,
+        )
+        return
+
     for i in range(Process_num):
         p = Process(target=func_compare_annoy_fast_one, args=(detect_binary_func_vec_list[int((i/Process_num)*len(detect_binary_func_vec_list)):int(((i+1)/Process_num)*len(detect_binary_func_vec_list))], detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path))
         p_list.append(p)
