@@ -1,7 +1,9 @@
 import random
+import os
 
 import torch
 import torch.nn.functional as F
+import tqdm
 
 
 def get_afcg_one_annoy(func_pair, sim_funcs, all_afcg):
@@ -162,6 +164,7 @@ def tpl_detection_fast_utils_annoy_v2(
     ]
 
     alignment_tred = 3
+    enable_progress = os.environ.get("LIBAM_TPL_PROGRESS", "1") == "1"
 
     obj_sim_funcs = []
     obj_sim_funcs_dict = {}
@@ -180,12 +183,41 @@ def tpl_detection_fast_utils_annoy_v2(
             cdd_sim_funcs_dict[func_pair[1]].append(func_pair[0])
 
     target_reuse_area_dict = {}
-    for func_pair in matched_func_ingraph_list:
+    stats = {
+        "pairs_total": len(matched_func_ingraph_list),
+        "skip_empty_afcg": 0,
+        "skip_blacklist": 0,
+        "skip_low_gnn": 0,
+        "skip_low_align_rate": 0,
+        "skip_short_alignment": 0,
+        "skip_scale_guard": 0,
+        "skip_final_guard": 0,
+        "accepted": 0,
+    }
+
+    pair_iter = tqdm.tqdm(
+        matched_func_ingraph_list,
+        desc=f"TPL {object_name}->{candidate_name}",
+        leave=False,
+        disable=not enable_progress,
+    )
+
+    for pair_idx, func_pair in enumerate(pair_iter, start=1):
+        if enable_progress and pair_idx % 50 == 0:
+            pair_iter.set_postfix(
+                accepted=stats["accepted"],
+                low_gnn=stats["skip_low_gnn"],
+                low_align=stats["skip_low_align_rate"],
+                short_align=stats["skip_short_alignment"],
+            )
+
         obj_afcg = get_afcg_one_annoy(func_pair[0], obj_sim_funcs, tar_afcg_dict)
         cdd_afcg = get_afcg_one_annoy(func_pair[1], cdd_sim_funcs, cdd_afcg_dict)
         if len(obj_afcg) == 0 or len(cdd_afcg) == 0:
+            stats["skip_empty_afcg"] += 1
             continue
         if func_pair[1] in black_list:
+            stats["skip_blacklist"] += 1
             continue
 
         obj_fcg = tar_subgraph[func_pair[0]]
@@ -197,6 +229,7 @@ def tpl_detection_fast_utils_annoy_v2(
         gnn_score = (1 + gnn_score.cpu().detach().numpy()[0]) / 2.0
 
         if gnn_score < 0.8:
+            stats["skip_low_gnn"] += 1
             continue
 
         obj_num = len(set(obj_fcg["feature"]))
@@ -225,6 +258,7 @@ def tpl_detection_fast_utils_annoy_v2(
 
         align_rate_score = 0.3 * align_rate + 0.7
         if gnn_score * align_rate_score < 0.8:
+            stats["skip_low_align_rate"] += 1
             continue
 
         l_max = 0
@@ -257,6 +291,7 @@ def tpl_detection_fast_utils_annoy_v2(
                 break
 
         if len(lenth_max) < 2:
+            stats["skip_short_alignment"] += 1
             continue
 
         alignment_temp = len(lenth_max)
@@ -264,6 +299,7 @@ def tpl_detection_fast_utils_annoy_v2(
             alignment_temp = 0
 
         if not ((obj_fcg["n_num"] >= 3 and cdd_fcg["n_num"] >= 3 and alignment_temp >= alignment_tred) or (obj_num <= 10 and cdd_num <= 10 and alignment_temp >= 2)):
+            stats["skip_scale_guard"] += 1
             continue
 
         node_pair = func_pair
@@ -288,6 +324,7 @@ def tpl_detection_fast_utils_annoy_v2(
         node_fcg_scale_diff_score = 0.3 * min(node_fcg_scale_pair[0], node_fcg_scale_pair[1]) / max(node_fcg_scale_pair[0], node_fcg_scale_pair[1]) + 0.7
 
         if node_alignment_num_score <= 0 or node_fcg_scale_pair[0] < 2 or node_fcg_scale_pair[1] < 2:
+            stats["skip_final_guard"] += 1
             continue
 
         final_score = RARM_score(
@@ -306,7 +343,25 @@ def tpl_detection_fast_utils_annoy_v2(
                 target_reuse_area_dict[candidate_name][node_pair_str] = []
             target_reuse_area_dict[candidate_name][node_pair_str].append(node_pair_feature[node_pair_str])
             reuse_flag = True
+            stats["accepted"] += 1
             break
+
+    if enable_progress:
+        tqdm.tqdm.write(
+            "[tpl-diag] {} -> {} | pairs={} accepted={} empty_afcg={} blacklist={} low_gnn={} low_align={} short_align={} scale_guard={} final_guard={}".format(
+                object_name,
+                candidate_name,
+                stats["pairs_total"],
+                stats["accepted"],
+                stats["skip_empty_afcg"],
+                stats["skip_blacklist"],
+                stats["skip_low_gnn"],
+                stats["skip_low_align_rate"],
+                stats["skip_short_alignment"],
+                stats["skip_scale_guard"],
+                stats["skip_final_guard"],
+            )
+        )
 
     if reuse_flag:
         return reuse_flag, target_reuse_area_dict
