@@ -1,10 +1,16 @@
-import argparse
 import csv
 import json
 import os
 from collections import defaultdict
 
 from settings import DATA_PATH
+
+
+AREA_DIR = os.path.join(DATA_PATH, "6_tpl_fast_result", "tpl_fast_area")
+OUTPUT_CSV = os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_matrix.csv")
+OUTPUT_JSON = os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_matrix.json")
+HEATMAP_PNG = os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_heatmap.png")
+SKIP_HEATMAP = False
 
 
 def _to_float(value):
@@ -142,60 +148,30 @@ def write_heatmap(output_png, binaries, matrix):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Build binary-vs-binary similarity matrix from step-4 area results."
-    )
-    parser.add_argument(
-        "--area-dir",
-        default=os.path.join(DATA_PATH, "6_tpl_fast_result", "tpl_fast_area"),
-        help="Directory containing *_feature_result.json files from step 4.",
-    )
-    parser.add_argument(
-        "--output-csv",
-        default=os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_matrix.csv"),
-        help="Path to write CSV matrix.",
-    )
-    parser.add_argument(
-        "--output-json",
-        default=os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_matrix.json"),
-        help="Path to write JSON matrix metadata.",
-    )
-    parser.add_argument(
-        "--heatmap-png",
-        default=os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_heatmap.png"),
-        help="Path to write heatmap PNG image.",
-    )
-    parser.add_argument(
-        "--skip-heatmap",
-        action="store_true",
-        help="Skip generating the PNG heatmap.",
-    )
-    args = parser.parse_args()
+    if not os.path.isdir(AREA_DIR):
+        raise FileNotFoundError(f"Area directory not found: {AREA_DIR}")
 
-    if not os.path.isdir(args.area_dir):
-        raise FileNotFoundError(f"Area directory not found: {args.area_dir}")
-
-    pair_scores, binaries = build_pair_scores(args.area_dir)
+    pair_scores, binaries = build_pair_scores(AREA_DIR)
     if not binaries:
-        raise RuntimeError(f"No *_feature_result.json files found under: {args.area_dir}")
+        raise RuntimeError(f"No *_feature_result.json files found under: {AREA_DIR}")
 
     matrix, avg_scores = build_matrix(pair_scores, binaries)
 
-    os.makedirs(os.path.dirname(args.output_csv), exist_ok=True)
-    os.makedirs(os.path.dirname(args.output_json), exist_ok=True)
-    write_csv(args.output_csv, binaries, matrix)
-    write_json(args.output_json, binaries, matrix, avg_scores)
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    os.makedirs(os.path.dirname(OUTPUT_JSON), exist_ok=True)
+    write_csv(OUTPUT_CSV, binaries, matrix)
+    write_json(OUTPUT_JSON, binaries, matrix, avg_scores)
 
     heatmap_written = None
-    if not args.skip_heatmap:
-        os.makedirs(os.path.dirname(args.heatmap_png), exist_ok=True)
-        write_heatmap(args.heatmap_png, binaries, matrix)
-        heatmap_written = args.heatmap_png
+    if not SKIP_HEATMAP:
+        os.makedirs(os.path.dirname(HEATMAP_PNG), exist_ok=True)
+        write_heatmap(HEATMAP_PNG, binaries, matrix)
+        heatmap_written = HEATMAP_PNG
 
     print(f"Binaries: {len(binaries)}")
     print(f"Pairs with scores: {len(avg_scores)}")
-    print(f"CSV: {args.output_csv}")
-    print(f"JSON: {args.output_json}")
+    print(f"CSV: {OUTPUT_CSV}")
+    print(f"JSON: {OUTPUT_JSON}")
     if heatmap_written:
         print(f"Heatmap: {heatmap_written}")
 
