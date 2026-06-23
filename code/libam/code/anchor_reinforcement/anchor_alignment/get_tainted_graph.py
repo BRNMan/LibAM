@@ -192,6 +192,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
                 matched_func_list,
                 candidate_fcg,
                 obj_com_funcs,
+                cdd_com_funcs,
                 gnn,
                 fcgs_num,
                 tar_afcg_dict[object_name],
