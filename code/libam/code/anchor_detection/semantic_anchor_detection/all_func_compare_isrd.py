@@ -46,6 +46,7 @@ def select_diverse_top_matches(func_score_dict, top_k=100, per_binary_cap=20):
 
 def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path):
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
+    enable_diag = True
     for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="Target Binary Progress"):
         if detect_binary in detect_binary_func_vec and not os.path.exists(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json")):
             # 
@@ -94,10 +95,28 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                         else:
                             break
                         
+            selected_candidate_bins = set()
             for detect_func in score_dict:
                 object_cdd_func_list = select_diverse_top_matches(score_dict[detect_func], top_k=100, per_binary_cap=20)
                 for object_cdd_func_item in object_cdd_func_list:
                     deal_score_dict[detect_binary+"----"+detect_func+"||||"+object_cdd_func_item[0]] = object_cdd_func_item[1]
+                    selected_candidate_bins.add(object_cdd_func_item[0].split("----", 1)[0])
+
+            if enable_diag:
+                raw_candidate_bins = set()
+                for func_name in score_dict:
+                    for match_key in score_dict[func_name]:
+                        raw_candidate_bins.add(match_key.split("----", 1)[0])
+                print(
+                    "[diag] {}: raw_bins={} selected_bins={} raw_pairs={} selected_pairs={} matched_funcs={}".format(
+                        detect_binary,
+                        len(raw_candidate_bins),
+                        len(selected_candidate_bins),
+                        len(raw_score_dict),
+                        len(deal_score_dict),
+                        len(score_dict),
+                    )
+                )
             end = time.time()
             run_time = end - start
             time_dict[detect_binary] = run_time
