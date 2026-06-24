@@ -11,6 +11,8 @@ def get_afcg_one_annoy(func_pair, sim_funcs, all_afcg):
     if func_pair in all_afcg:
         afcg_pre = all_afcg[func_pair]
         for child_node in afcg_pre:
+            # Strictly check if the anchor has children that are also anchors
+            # This is a prerequisite for the anchor alignment algorithm. 
             if child_node in sim_funcs and child_node != func_pair and child_node not in afcg:
                 afcg.append(child_node)
     return afcg
