@@ -119,7 +119,7 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
     ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "100")))
     dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.058"))
     topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "20")))
-    per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "50")))
+    per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "5000")))
     max_total = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_TOTAL", "5000")))
     per_cdd_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_PER_CDD_BIN", "50")))
     for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="Target Binary Progress"):
