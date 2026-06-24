@@ -121,7 +121,7 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
     topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "20")))
     per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "5000")))
     max_total = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_TOTAL", "5000")))
-    per_cdd_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_PER_CDD_BIN", "50")))
+    per_cdd_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_PER_CDD_BIN", "5000")))
     for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="Target Binary Progress"):
         if detect_binary in detect_binary_func_vec and not os.path.exists(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json")):
             time_dict = {}
