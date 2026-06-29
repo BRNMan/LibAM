@@ -91,7 +91,7 @@ def compare_one_file_embeddings(target_file_embeddings: dict, candidate_file_emb
     avg_target_emb = None
     for target_func in target_file_embeddings:
         cur_emb = np.array(target_file_embeddings[target_func])
-        if avg_target_emb  == None:
+        if avg_target_emb  is None:
             avg_target_emb = cur_emb
         else:
             avg_target_emb += cur_emb
@@ -99,7 +99,7 @@ def compare_one_file_embeddings(target_file_embeddings: dict, candidate_file_emb
     avg_candidate_emb = None
     for candidate_func in candidate_file_embeddings:
         cur_emb = np.array(target_file_embeddings[candidate_func])
-        if avg_candidate_emb == None:
+        if avg_candidate_emb is None:
             avg_candidate_emb = cur_emb
         else:
             avg_candidate_emb += cur_emb
