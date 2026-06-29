@@ -11,7 +11,7 @@ def plot_embeddings():
     target_emb_path = os.path.join(DATA_PATH, "4_embedding/", "target_in9_embedding.json")
     candidate_emb_path = os.path.join(DATA_PATH, "4_embedding/", "candidate_in9_embedding.json")
     
-    binaries, results = read_embeddings_files(target_emb_path, candidate_emb_path)
+    results, binaries = read_embeddings_files(target_emb_path, candidate_emb_path)
     n = len(binaries)
     flat_scores = [v for row in results for v in row]
     vmax = max(flat_scores) if flat_scores else 1.0
