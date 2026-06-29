@@ -98,7 +98,7 @@ def compare_one_file_embeddings(target_file_embeddings: dict, candidate_file_emb
     
     avg_candidate_emb = None
     for candidate_func in candidate_file_embeddings:
-        cur_emb = np.array(target_file_embeddings[candidate_func])
+        cur_emb = np.array(candidate_file_embeddings[candidate_func])
         if avg_candidate_emb is None:
             avg_candidate_emb = cur_emb
         else:
@@ -108,7 +108,7 @@ def compare_one_file_embeddings(target_file_embeddings: dict, candidate_file_emb
     avg_candidate_emb /= len(candidate_file_embeddings.keys())
 
     # Cosine similarity
-    similarity = np.dot(avg_target_emb, avg_candidate_emb) / norm(avg_target_emb) * norm(avg_candidate_emb)
+    similarity = np.dot(avg_target_emb[0], avg_candidate_emb[0]) / norm(avg_target_emb[0]) * norm(avg_candidate_emb[0])
 
     return similarity
 
