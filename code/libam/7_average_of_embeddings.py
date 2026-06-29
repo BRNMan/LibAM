@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 DATA_PATH = "data/"
 OUTPUT_HEATMAP_PATH = os.path.join(DATA_PATH, "6_tpl_fast_result", "function_embeddings_heatmap.png")
 
-
 def plot_embeddings():
     target_emb_path = os.path.join(DATA_PATH, "4_embedding/", "target_in9_embedding.json")
     candidate_emb_path = os.path.join(DATA_PATH, "4_embedding/", "candidate_in9_embedding.json")
@@ -112,3 +111,5 @@ def compare_one_file_embeddings(target_file_embeddings: dict, candidate_file_emb
     similarity = np.dot(avg_target_emb, avg_candidate_emb) / norm(avg_target_emb) * norm(avg_candidate_emb)
 
     return similarity
+
+plot_embeddings()

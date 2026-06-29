@@ -116,7 +116,7 @@ def save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_l
 def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path):
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
     enable_diag = os.environ.get("LIBAM_COMPARE_DIAG", "1") == "1"
-    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "500")))
+    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "100")))
     dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.058"))
     topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "20")))
     per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "20")))
