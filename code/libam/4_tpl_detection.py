@@ -10,16 +10,9 @@ sys.path.append("code/reuse_area_exploration/TPL_detection")
 sys.path.append("code/reuse_area_exploration/reuse_area_detection")
 
 
-import all_func_compare_isrd as anchor_detection_module
-import binary_preprocess as binary_preprocess_module
-import Generate_func_embedding as embeddings_generate_module
 import get_tainted_graph as anchor_reinforcement_module
-import fcg_gnn_score as embeded_gnn_module
-import get_final_score_multi as TPL_detection_module1
 import get_final_result_dict as TPL_detection_module2
-import cal_result as TPL_detection_module3
-import adjust_area as area_adjustment_module
-import compare_area as reuse_area_detection_module
+
 
 
 def cli():
@@ -31,7 +24,8 @@ def cli():
     # Default to top-k pruned anchors for faster TPL detection.
     # Override with LIBAM_TPL_SCORE_DIR=score when full recall analysis is needed.
     tpl_score_dir = os.environ.get("LIBAM_TPL_SCORE_DIR", "top_scores")
-    anchor_reinforcement_module.tpl_detection_fast_annoy_simple_with_logging(os.path.join(DATA_PATH, "2_target/fcg"),
+    anchor_reinforcement_module.tpl_detection_fast_annoy_simple_with_logging(
+                        os.path.join(DATA_PATH, "2_target/fcg"),
                         os.path.join(DATA_PATH, "3_candidate/fcg"), 
                         os.path.join(DATA_PATH, "5_func_compare_result", tpl_score_dir) + "/", 
                         os.path.join(DATA_PATH, save_path+"tpl_fast_result"), 
