@@ -37,7 +37,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
     memory_log_path,
 ):
     import psutil
-    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "1") == "1"
 
     process = psutil.Process(os.getpid())
     memory_log = []
@@ -76,8 +76,6 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
         obj_com_funcs = obj_com_funcs_dict.get(object_name, [])
 
         for candidate_name in cdd_project_dict:
-            if candidate_name not in cdd_com_funcs_dict:
-                continue
             if object_name not in tar_afcg_dict or (not disable_gnn and tar_subgraph is None):
                 continue
             if candidate_name not in cdd_afcg_dict:
