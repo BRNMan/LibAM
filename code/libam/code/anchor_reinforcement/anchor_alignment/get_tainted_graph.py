@@ -37,6 +37,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
     memory_log_path,
 ):
     import psutil
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
 
     process = psutil.Process(os.getpid())
     memory_log = []
@@ -60,13 +61,16 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
             del object_fcg
             continue
 
-        try:
-            with open(os.path.join(tar_subgraph_path, f"{object_name}_subgraph.json"), "r") as f:
-                tar_subgraph = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            del object_fcg
-            del object_cdd_func_dict
-            continue
+        if disable_gnn:
+            tar_subgraph = {}
+        else:
+            try:
+                with open(os.path.join(tar_subgraph_path, f"{object_name}_subgraph.json"), "r") as f:
+                    tar_subgraph = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                del object_fcg
+                del object_cdd_func_dict
+                continue
 
         cdd_project_dict = get_cdd_func_dict(object_cdd_func_dict)
         obj_com_funcs = obj_com_funcs_dict.get(object_name, [])
@@ -74,9 +78,11 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
         for candidate_name in cdd_project_dict:
             if candidate_name not in cdd_com_funcs_dict:
                 continue
-            if object_name not in tar_afcg_dict or tar_subgraph is None:
+            if object_name not in tar_afcg_dict or (not disable_gnn and tar_subgraph is None):
                 continue
-            if candidate_name not in cdd_afcg_dict or candidate_name not in cdd_subgraph_dict:
+            if candidate_name not in cdd_afcg_dict:
+                continue
+            if not disable_gnn and candidate_name not in cdd_subgraph_dict:
                 continue
 
             mem_before_cdd_load = process.memory_info().rss / 1024 / 1024
@@ -187,6 +193,7 @@ def tpl_detection_fast_annoy_simple_with_logging(
     cdd_subgraph_path,
 ):
     import psutil
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "1") == "1"
 
     main_process = psutil.Process(os.getpid())
     object_item_list = os.listdir(func_path)
@@ -196,7 +203,12 @@ def tpl_detection_fast_annoy_simple_with_logging(
         tar_bin_name = tar_afcg_item.split("_afcg.json")[0]
         tar_afcg_dict[tar_bin_name] = json.load(open(os.path.join(tar_afcg_path, tar_afcg_item), "r"))
 
-    cdd_subgraph_files = sorted(os.listdir(cdd_subgraph_path))
+    if disable_gnn:
+        cdd_subgraph_files = sorted(
+            [item.replace("_afcg.json", "_subgraph.json") for item in os.listdir(cdd_afcg_path) if item.endswith("_afcg.json")]
+        )
+    else:
+        cdd_subgraph_files = sorted(os.listdir(cdd_subgraph_path))
 
     for path in [feature_save_path, area_save_path, sim_funcs_path, time_path]:
         os.makedirs(path, exist_ok=True)
@@ -262,12 +274,13 @@ def tpl_detection_fast_annoy_simple_with_logging(
             except (FileNotFoundError, json.JSONDecodeError):
                 continue
         cdd_subgraph_dict = {}
-        for cdd_subgraph_item in phase_subgraph_files:
-            cdd_bin_name = cdd_subgraph_item.split("_subgraph.json")[0]
-            try:
-                cdd_subgraph_dict[cdd_bin_name] = json.load(open(os.path.join(cdd_subgraph_path, cdd_subgraph_item), "r"))
-            except (FileNotFoundError, json.JSONDecodeError):
-                continue
+        if not disable_gnn:
+            for cdd_subgraph_item in phase_subgraph_files:
+                cdd_bin_name = cdd_subgraph_item.split("_subgraph.json")[0]
+                try:
+                    cdd_subgraph_dict[cdd_bin_name] = json.load(open(os.path.join(cdd_subgraph_path, cdd_subgraph_item), "r"))
+                except (FileNotFoundError, json.JSONDecodeError):
+                    continue
 
         mem_after_load = main_process.memory_info().rss / 1024 / 1024
         phase_memory_log.append(

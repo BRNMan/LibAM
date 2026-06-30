@@ -6,6 +6,18 @@ import torch.nn.functional as F
 import tqdm
 
 
+def build_local_fcg_from_afcg(func_name, afcg_dict):
+    # Fallback local structure for no-GNN mode: root function + its AFCG children.
+    children = []
+    if func_name in afcg_dict:
+        children = [c for c in afcg_dict[func_name] if c != func_name]
+    feature = [func_name]
+    for child in children:
+        if child not in feature:
+            feature.append(child)
+    return {"feature": feature, "n_num": len(feature), "embedding": None}
+
+
 def get_afcg_one_annoy(func_pair, sim_funcs, all_afcg):
     afcg = []
     if func_pair in all_afcg:
@@ -150,6 +162,7 @@ def tpl_detection_fast_utils_annoy_v2(
     cdd_subgraph_dict,
 ):
     reuse_flag = False
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "1") == "1"
     black_list = [
         "_start",
         "__libc_start_main",
@@ -189,6 +202,7 @@ def tpl_detection_fast_utils_annoy_v2(
         "pairs_total": len(matched_func_ingraph_list),
         "skip_empty_afcg": 0,
         "skip_blacklist": 0,
+        "skip_missing_subgraph": 0,
         "skip_low_gnn": 0,
         "skip_low_align_rate": 0,
         "skip_short_alignment": 0,
@@ -223,13 +237,21 @@ def tpl_detection_fast_utils_annoy_v2(
             stats["skip_blacklist"] += 1
             continue
 
-        obj_fcg = tar_subgraph[func_pair[0]]
-        cdd_fcg = cdd_subgraph_dict[func_pair[1]]
+        if disable_gnn:
+            obj_fcg = build_local_fcg_from_afcg(func_pair[0], tar_afcg_dict)
+            cdd_fcg = build_local_fcg_from_afcg(func_pair[1], cdd_afcg_dict)
+            gnn_score = 1.0
+        else:
+            if func_pair[0] not in tar_subgraph or func_pair[1] not in cdd_subgraph_dict:
+                stats["skip_missing_subgraph"] += 1
+                continue
+            obj_fcg = tar_subgraph[func_pair[0]]
+            cdd_fcg = cdd_subgraph_dict[func_pair[1]]
 
-        obj_embedding = torch.tensor(obj_fcg["embedding"])
-        cdd_embedding = torch.tensor(cdd_fcg["embedding"])
-        gnn_score = F.cosine_similarity(obj_embedding, cdd_embedding, eps=1e-10, dim=1)
-        gnn_score = (1 + gnn_score.cpu().detach().numpy()[0]) / 2.0
+            obj_embedding = torch.tensor(obj_fcg["embedding"])
+            cdd_embedding = torch.tensor(cdd_fcg["embedding"])
+            gnn_score = F.cosine_similarity(obj_embedding, cdd_embedding, eps=1e-10, dim=1)
+            gnn_score = (1 + gnn_score.cpu().detach().numpy()[0]) / 2.0
 
         if gnn_score < 0.8:
             stats["skip_low_gnn"] += 1
@@ -352,19 +374,21 @@ def tpl_detection_fast_utils_annoy_v2(
 
     if enable_progress:
         tqdm.tqdm.write(
-            "[tpl-diag] {} -> {} | pairs={} accepted={} empty_afcg={} blacklist={} low_gnn={} low_align={} short_align={} scale_guard={} final_guard={}, no_child_funcs_found={}".format(
+            "[tpl-diag] {} -> {} | pairs={} accepted={} empty_afcg={} blacklist={} missing_subgraph={} low_gnn={} low_align={} short_align={} scale_guard={} final_guard={}, no_child_funcs_found={}, disable_gnn={}".format(
                 object_name,
                 candidate_name,
                 stats["pairs_total"],
                 stats["accepted"],
                 stats["skip_empty_afcg"],
                 stats["skip_blacklist"],
+                stats["skip_missing_subgraph"],
                 stats["skip_low_gnn"],
                 stats["skip_low_align_rate"],
                 stats["skip_short_alignment"],
                 stats["skip_scale_guard"],
                 stats["skip_final_guard"],
                 stats["skip_no_child_funcs_found"],
+                int(disable_gnn),
             )
         )
 
