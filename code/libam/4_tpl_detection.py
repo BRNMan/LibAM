@@ -47,7 +47,7 @@ def cli():
                         DATA_PATH+"4_embedding/tar_subgraph",
                         DATA_PATH+"4_embedding/cdd_subgraph")
     TPL_detection_module2.get_result_json(os.path.join(DATA_PATH, save_path+"tpl_fast_result"), os.path.join(DATA_PATH, save_path+"tpl_fast_result.json"))
-    TPL_detection_module3.cal_libae_result(os.path.join(DATA_PATH, save_path+"tpl_fast_result.json"), os.path.join(GT_PATH, "tpl_ground_truth.json"), os.path.join(DATA_PATH, save_path+"TPL_score/"))
+    # TPL_detection_module3.cal_libae_result(os.path.join(DATA_PATH, save_path+"tpl_fast_result.json"), os.path.join(GT_PATH, "tpl_ground_truth.json"), os.path.join(DATA_PATH, save_path+"TPL_score/"))
     
     
    
