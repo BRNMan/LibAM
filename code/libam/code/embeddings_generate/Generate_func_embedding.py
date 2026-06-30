@@ -208,7 +208,7 @@ def generate_subgraph(save_path, fcg_path, func_embedding_path, model_path):
 
         
 
-def subfcg_embedding(TIME_PATH, test_gemini_feat_paths, savePath, model_path):
+def function_embedding(TIME_PATH, test_gemini_feat_paths, savePath, model_path):
     # test_gemini_feat_paths = '/data/wangyongpan/libdb_dataset_features'
     gnn = load_model(model_path)
     fname_embeddings = {}
@@ -254,5 +254,5 @@ def subfcg_embedding(TIME_PATH, test_gemini_feat_paths, savePath, model_path):
     pass
 
 if __name__ == '__main__':
-    subfcg_embedding()
+    function_embedding()
 

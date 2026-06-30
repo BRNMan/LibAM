@@ -194,6 +194,7 @@ def tpl_detection_fast_utils_annoy_v2(
         "skip_short_alignment": 0,
         "skip_scale_guard": 0,
         "skip_final_guard": 0,
+        "skip_no_child_funcs_found": 0,
         "accepted": 0,
     }
 
@@ -252,6 +253,7 @@ def tpl_detection_fast_utils_annoy_v2(
                     cdd_sim_num += 1
 
         if obj_com_num == 0 or cdd_com_num == 0:
+            stats["skip_no_child_funcs_found"] += 1
             continue
         if obj_com_num <= cdd_com_num:
             align_rate = obj_sim_num / obj_com_num
@@ -350,7 +352,7 @@ def tpl_detection_fast_utils_annoy_v2(
 
     if enable_progress:
         tqdm.tqdm.write(
-            "[tpl-diag] {} -> {} | pairs={} accepted={} empty_afcg={} blacklist={} low_gnn={} low_align={} short_align={} scale_guard={} final_guard={}".format(
+            "[tpl-diag] {} -> {} | pairs={} accepted={} empty_afcg={} blacklist={} low_gnn={} low_align={} short_align={} scale_guard={} final_guard={}, no_child_funcs_found={}".format(
                 object_name,
                 candidate_name,
                 stats["pairs_total"],
@@ -362,6 +364,7 @@ def tpl_detection_fast_utils_annoy_v2(
                 stats["skip_short_alignment"],
                 stats["skip_scale_guard"],
                 stats["skip_final_guard"],
+                stats["skip_no_child_funcs_found"],
             )
         )
 

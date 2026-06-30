@@ -5,13 +5,14 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 
 DATA_PATH = "data/"
-OUTPUT_HEATMAP_PATH = os.path.join(DATA_PATH, "6_tpl_fast_result", "function_embeddings_heatmap.png")
+OUTPUT_HEATMAP_PATH = os.path.join(DATA_PATH, "function_embeddings_heatmap.png")
 
 def plot_embeddings():
-    target_emb_path = os.path.join(DATA_PATH, "4_embedding/", "target_in9_embedding.json")
-    candidate_emb_path = os.path.join(DATA_PATH, "4_embedding/", "candidate_in9_embedding.json")
+    target_emb_path = os.path.join(DATA_PATH, "candidate_in9_embedding.json")
+    candidate_emb_path = os.path.join(DATA_PATH, "candidate_in9_embedding.json")
     
     results, binaries = read_embeddings_files(target_emb_path, candidate_emb_path)
+    print(binaries)
     n = len(binaries)
     flat_scores = [v for row in results for v in row]
     vmax = max(flat_scores) if flat_scores else 1.0
@@ -49,11 +50,21 @@ def read_embeddings_files(target_emb_filepath, candidate_emb_filepath):
         all_target_embeddings, 
         all_candidate_embeddings
         )
-    return sim_scores, binaries
+    # Convert dict of scores to array
+    score_array = []
+    for key in sim_scores:
+        target_scores = sim_scores[key]
+        score_array.append([])
+        for candidate_key in target_scores:
+            sim_score = target_scores[candidate_key]
+            score_array[-1].append(sim_score)
+    
+    return score_array, binaries
 
 def read_embeddings_from_json_object(object):
     file_map = dict()
     binaries = []
+    target_filename = ""
     for file_function_key in object:
         arr = file_function_key.split("|||")
         target_filename = arr[0]
@@ -63,8 +74,9 @@ def read_embeddings_from_json_object(object):
             file_map[target_filename] = {target_function: embedding}
         else:
             file_map[target_filename][target_function] = embedding
-
-        binaries.append(target_filename)
+    file_map = {k: v for k,v in sorted(file_map.items())}
+    print(file_map.keys())
+    binaries = list(file_map.keys())
     return file_map, binaries
 
 def compare_all_embeddings(target_embeddings, candidate_embeddings):
@@ -106,9 +118,8 @@ def compare_one_file_embeddings(target_file_embeddings: dict, candidate_file_emb
 
     avg_target_emb /= len(target_file_embeddings.keys())
     avg_candidate_emb /= len(candidate_file_embeddings.keys())
-
     # Cosine similarity
-    similarity = np.dot(avg_target_emb[0], avg_candidate_emb[0]) / norm(avg_target_emb[0]) * norm(avg_candidate_emb[0])
+    similarity = np.dot(avg_target_emb[0], avg_candidate_emb[0]) / (norm(avg_target_emb[0]) * norm(avg_candidate_emb[0]))
 
     return similarity
 
