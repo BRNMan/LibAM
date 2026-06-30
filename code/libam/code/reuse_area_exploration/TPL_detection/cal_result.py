@@ -217,6 +217,7 @@ def cal_score(mode_func, arg2, result_save_path, mode_item, libae_result, ground
         full_R = 0
         full_F1 = 0
         candidate_num = 0
+        gt_candidate_num = 0
         
         libae_result_deal = deal_with_sndfile(libae_result)
         
@@ -224,30 +225,40 @@ def cal_score(mode_func, arg2, result_save_path, mode_item, libae_result, ground
         
         for obj_item in libae_result_deal:
             if mode_func(obj_item, arg2) == 0:
-                if obj_item.split("_")[0] in libae_result_deal[obj_item]:
-                    libae_result_deal[obj_item].remove(obj_item.split("_")[0])
+                obj_key = obj_item.split("_")[0]
+                if obj_key in libae_result_deal[obj_item]:
+                    libae_result_deal[obj_item].remove(obj_key)
                 candidate_num += 1
-                (Precision, Recall, F1_s) = test_func(libae_result_deal[obj_item], ground_truth_dict[obj_item.split("_")[0]])
-                find_it = True
-                print(obj_item+" score: P:{} R:{} F1:{}".format(Precision, Recall, F1_s))
-                result_f.write(obj_item+" score: P:{} R:{} F1:{}\n".format(Precision, Recall, F1_s))
-                full_P += Precision
-                full_R += Recall
-                full_F1 += F1_s
-        if find_it:
-            if candidate_num > 0:
-                print("Full Precision: {}  Recall: {}  F1: {}".format(full_P/candidate_num, full_R/candidate_num, full_F1/candidate_num) )
-                result_f.write("Full Precision: {}  Recall: {}  F1: {}\n".format(full_P/candidate_num, full_R/candidate_num, full_F1/candidate_num) )
-            else:
-                print("Full Precision: {}  Recall: {}  F1: {}".format(full_P, full_R, full_F1) )
-                result_f.write("Full Precision: {}  Recall: {}  F1: {}\n".format(full_P, full_R, full_F1) )
+                if obj_key in ground_truth_dict:
+                    (Precision, Recall, F1_s) = test_func(libae_result_deal[obj_item], ground_truth_dict[obj_key])
+                    find_it = True
+                    gt_candidate_num += 1
+                    print(obj_item+" score: P:{} R:{} F1:{}".format(Precision, Recall, F1_s))
+                    result_f.write(obj_item+" score: P:{} R:{} F1:{}\n".format(Precision, Recall, F1_s))
+                    full_P += Precision
+                    full_R += Recall
+                    full_F1 += F1_s
+                else:
+                    detected_num = len(libae_result_deal[obj_item])
+                    print(obj_item+" detections: {} (no ground truth)".format(detected_num))
+                    result_f.write(obj_item+" detections: {} (no ground truth)\n".format(detected_num))
+        if find_it and gt_candidate_num > 0:
+            print("Full Precision: {}  Recall: {}  F1: {}".format(full_P/gt_candidate_num, full_R/gt_candidate_num, full_F1/gt_candidate_num) )
+            result_f.write("Full Precision: {}  Recall: {}  F1: {}\n".format(full_P/gt_candidate_num, full_R/gt_candidate_num, full_F1/gt_candidate_num) )
+        else:
+            print("No ground truth matched for mode {}. Processed {} items without scoring.".format(mode_item, candidate_num))
+            result_f.write("No ground truth matched for mode {}. Processed {} items without scoring.\n".format(mode_item, candidate_num))
 
 
 def cal_libae_result(libae_path, ground_truth_path, result_save_path):
     if not os.path.exists(result_save_path):
         os.makedirs(result_save_path)
     libae_result = get_json_data(libae_path)
-    ground_truth_dict = get_json_data(ground_truth_path)
+    if os.path.exists(ground_truth_path):
+        ground_truth_dict = get_json_data(ground_truth_path)
+    else:
+        ground_truth_dict = {}
+        print("Warning: ground truth file not found. Running in no-ground-truth mode.")
     
     all = ["arm_O0", "arm_O1", "arm_O2", "arm_O3", "x86_O0", "x86_O1", "x86_O2", "x86_O3", "x64_O0", "x64_O1", "x64_O2", "x64_O3"]
     arch_average = ["arm_O2", "x86_O2", "x64_O2"]
