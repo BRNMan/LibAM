@@ -115,7 +115,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
                 tar_afcg_dict[object_name],
                 cdd_afcg_dict[candidate_name],
                 tar_subgraph,
-                cdd_subgraph_dict[candidate_name],
+                cdd_subgraph_dict.get(candidate_name, {}),
             )
 
             mem_after_detection = process.memory_info().rss / 1024 / 1024
