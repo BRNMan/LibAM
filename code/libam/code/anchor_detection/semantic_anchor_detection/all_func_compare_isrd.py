@@ -113,50 +113,50 @@ def save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_l
 
 
 
-def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path):
-    black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
+def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vector, all_candidates_function_vec, score_opath, score_opath2, time_opath, embed_path):
+    function_blocklist = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
     enable_diag = os.environ.get("LIBAM_COMPARE_DIAG", "1") == "1"
     ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "200")))
-    dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.000"))
+    dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.500"))
     topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "50")))
     per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "50")))
     max_total = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_TOTAL", "5000")))
     per_cdd_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_PER_CDD_BIN", "5000")))
-    for detect_binary in tqdm.tqdm(detect_binary_func_vec_list, desc="Target Binary Progress"):
-        if detect_binary in detect_binary_func_vec and not os.path.exists(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json")):
+    for target_binary_name in tqdm.tqdm(target_func_keys_list, desc="Target Binary Progress"):
+        if target_binary_name in all_targets_function_vector and not os.path.exists(os.path.join(time_opath, target_binary_name+"isrd_triple_loss_time.json")):
             time_dict = {}
             start = time.time()
             score_dict = {}
             deal_score_dict = {}
             raw_score_dict = {}
-            detect_func_vec_dict =  detect_binary_func_vec[detect_binary]
+            cur_target_function_vec =  all_targets_function_vector[target_binary_name]
     
-            t = AnnoyIndex(64, 'angular')
+            candidate_index = AnnoyIndex(64, 'angular')
             if os.path.exists(os.path.join(embed_path, "all_candidate_bin.json")):
-                t.load(os.path.join(embed_path, "all_candidate.ann"))
+                candidate_index.load(os.path.join(embed_path, "all_candidate.ann"))
                 all_candidate_id_func_dict = json.load(open(os.path.join(embed_path, "all_candidate_func.json"), "r"))
                 all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
             else:
-                save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_list, f=64, n_trees=100)
-                t.load(os.path.join(embed_path, "all_candidate.ann"))
+                save_all_candidate_index(all_candidates_function_vec, embed_path, function_blocklist, f=64, n_trees=100)
+                candidate_index.load(os.path.join(embed_path, "all_candidate.ann"))
                 all_candidate_id_func_dict = json.load(open(os.path.join(embed_path, "all_candidate_func.json"), "r"))
                 all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
                 
             candidate_bin_dict = {}
-            for target_funcname in tqdm.tqdm(detect_func_vec_dict, desc=f"\t Detecting candidate anchors in {detect_binary}", position=0, leave=True):
-                if target_funcname in black_func_list:
+            for target_funcname in tqdm.tqdm(cur_target_function_vec, desc=f"\t Detecting candidate anchors in {target_binary_name}", position=0, leave=True):
+                if target_funcname in function_blocklist:
                     continue
-                query_result, distance_result = t.get_nns_by_vector(
-                    detect_func_vec_dict[target_funcname].tolist()[0],
+                query_result, distance_result = candidate_index.get_nns_by_vector(
+                    cur_target_function_vec[target_funcname].tolist()[0],
                     ann_top_n,
                     include_distances=True,
                 )
                 for i in range(len(query_result)):
-                    if distance_result[i] < dist_threshold:#0.7483:
+                    if distance_result[i] < dist_threshold:
                         if target_funcname not in score_dict:
                             score_dict[target_funcname] = {}
                         score_dict[target_funcname][all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
-                        raw_score_dict[detect_binary+"----"+target_funcname+"||||"+all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
+                        raw_score_dict[target_binary_name+"----"+target_funcname+"||||"+all_candidate_id_bin_dict[str(query_result[i])]+"----"+all_candidate_id_func_dict[str(query_result[i])]] = distance_result[i]
                     else:
                         break
                         
@@ -169,7 +169,7 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                     per_binary_cap=per_bin_cap,
                 )
                 for object_cdd_func_item in object_cdd_func_list:
-                    match_key = detect_binary+"----"+detect_func+"||||"+object_cdd_func_item[0]
+                    match_key = target_binary_name+"----"+detect_func+"||||"+object_cdd_func_item[0]
                     pre_global_selected.append((match_key, object_cdd_func_item[1]))
                     selected_candidate_bins.add(object_cdd_func_item[0].split("----", 1)[0])
 
@@ -187,7 +187,7 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                         raw_candidate_bins.add(match_key.split("----", 1)[0])
                 print(
                     "[diag] {}: raw_bins={} selected_bins={} raw_pairs={} pre_global_selected={} selected_pairs={} matched_funcs={} ann_top_n={} dist_th={} topk_per_func={} per_bin_cap={} max_total={} per_cdd_bin_cap={}".format(
-                        detect_binary,
+                        target_binary_name,
                         len(raw_candidate_bins),
                         len(selected_candidate_bins),
                         len(raw_score_dict),
@@ -204,19 +204,19 @@ def func_compare_annoy_fast_one(detect_binary_func_vec_list, detect_binary_func_
                 )
             end = time.time()
             run_time = end - start
-            time_dict[detect_binary] = run_time
-            json.dump(raw_score_dict, open(os.path.join(score_opath, detect_binary+"_reuse_func_dict.json"), "w"))
-            json.dump(deal_score_dict, open(os.path.join(score_opath2, detect_binary+"_reuse_func_dict.json"), "w"))
-            json.dump(time_dict, open(os.path.join(time_opath, detect_binary+"isrd_triple_loss_time.json"), "w"))    
+            time_dict[target_binary_name] = run_time
+            json.dump(raw_score_dict, open(os.path.join(score_opath, target_binary_name+"_reuse_func_dict.json"), "w"))
+            json.dump(deal_score_dict, open(os.path.join(score_opath2, target_binary_name+"_reuse_func_dict.json"), "w"))
+            json.dump(time_dict, open(os.path.join(time_opath, target_binary_name+"isrd_triple_loss_time.json"), "w"))    
 
 
 def func_compare_annoy_fast_multi(object_path, candidate_path, score_opath, score_opath2, time_opath, embed_path):
-    detect_binary_func_vec = get_func_embeddings(object_path)
-    candidate_binary_func_vec = get_func_embeddings(candidate_path)
+    all_targets_func_vec = get_func_embeddings(object_path)
+    all_candidates_func_vec = get_func_embeddings(candidate_path)
     
     
     
-    detect_binary_func_vec_list = list(detect_binary_func_vec.keys())
+    target_func_keys_list = list(all_targets_func_vec.keys())
 
     if False == os.path.exists(score_opath):
         os.makedirs(score_opath)
@@ -228,16 +228,16 @@ def func_compare_annoy_fast_multi(object_path, candidate_path, score_opath, scor
         os.makedirs(embed_path)
 
     black_func_list = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
-    save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_list, f=64, n_trees=100)
+    save_all_candidate_index(all_candidates_func_vec, embed_path, black_func_list, f=64, n_trees=100)
     
     p_list = []
     Process_num = max(1, int(os.environ.get("LIBAM_COMPARE_PROCESSES", "1")))
 
     if Process_num == 1:
         func_compare_annoy_fast_one(
-            detect_binary_func_vec_list,
-            detect_binary_func_vec,
-            candidate_binary_func_vec,
+            target_func_keys_list,
+            all_targets_func_vec,
+            all_candidates_func_vec,
             score_opath,
             score_opath2,
             time_opath,
@@ -246,7 +246,7 @@ def func_compare_annoy_fast_multi(object_path, candidate_path, score_opath, scor
         return
 
     for i in range(Process_num):
-        p = Process(target=func_compare_annoy_fast_one, args=(detect_binary_func_vec_list[int((i/Process_num)*len(detect_binary_func_vec_list)):int(((i+1)/Process_num)*len(detect_binary_func_vec_list))], detect_binary_func_vec, candidate_binary_func_vec, score_opath, score_opath2, time_opath, embed_path))
+        p = Process(target=func_compare_annoy_fast_one, args=(target_func_keys_list[int((i/Process_num)*len(target_func_keys_list)):int(((i+1)/Process_num)*len(target_func_keys_list))], all_targets_func_vec, all_candidates_func_vec, score_opath, score_opath2, time_opath, embed_path))
         p_list.append(p)
             #args_list.append([candidate_software, object_funcs, object_software, candidate_funcs, object_matrix, sims_list_opath])
             # compare_one_cdd_bin([candidate_software, object_funcs, object_software, candidate_funcs, object_matrix, sims_list_opath])
