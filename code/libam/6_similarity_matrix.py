@@ -230,7 +230,7 @@ def write_heatmap(output_png, binaries, matrix):
     fig, ax = plt.subplots(figsize=(fig_size, fig_size))
     im = ax.imshow(matrix, cmap="viridis", vmin=0.0, vmax=vmax, interpolation="nearest")
 
-    ax.set_title("Binary Similarity Heatmap (Average final_score)")
+    ax.set_title("Binary Similarity Heatmap (O0 vs O0) (Average final_score)")
     ax.set_xlabel("Candidate Binary")
     ax.set_ylabel("Object Binary")
     ax.set_xticks(range(n))
