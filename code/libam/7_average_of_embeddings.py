@@ -8,8 +8,8 @@ DATA_PATH = "data/"
 OUTPUT_HEATMAP_PATH = os.path.join(DATA_PATH, "function_embeddings_heatmap.png")
 
 def plot_embeddings():
-    target_emb_path = os.path.join(DATA_PATH, "candidate_in9_embedding.json")
-    candidate_emb_path = os.path.join(DATA_PATH, "candidate_in9_embedding.json")
+    target_emb_path = os.path.join(DATA_PATH, "4_embedding/target_in9_embedding.json")
+    candidate_emb_path = os.path.join(DATA_PATH, "4_embedding/candidate_in9_embedding.json")
     
     results, binaries = read_embeddings_files(target_emb_path, candidate_emb_path)
     print(binaries)
