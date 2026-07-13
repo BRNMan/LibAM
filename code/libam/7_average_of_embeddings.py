@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 DATA_PATH = "data/"
 
-def plot_one_graph(binaries, results, rankings=False):
+def plot_one_graph(results, binaries, rankings=False):
     n = len(binaries)
     flat_scores = [v for row in results for v in row]
     vmax = max(flat_scores) if flat_scores else 1.0
