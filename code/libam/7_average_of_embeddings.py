@@ -39,17 +39,44 @@ def plot_embeddings():
     plt.close(fig)
     return
 
-def read_embeddings_files(target_emb_filepath, candidate_emb_filepath):
+def read_embeddings_files(target_emb_filepath, candidate_emb_filepath, return_rankings=False):
     all_target_embeddings = []
     all_candidate_embeddings = []
     with open(target_emb_filepath, "r") as f:
         all_target_embeddings = json.load(f)
     with open(candidate_emb_filepath, "r") as f:
         all_candidate_embeddings = json.load(f)
+
+    return read_all_embeddings(
+        all_target_embeddings,
+        all_candidate_embeddings,
+        return_rankings=return_rankings,
+    )
+
+
+def rank_sim_scores(sim_scores):
+    rankings = []
+    for target in sim_scores:
+        target_scores = sim_scores[target]
+        candidate_keys = list(target_scores.keys())
+        sorted_candidates = sorted(candidate_keys, key=lambda c: target_scores[c])
+        candidate_to_rank = {
+            candidate: rank for rank, candidate in enumerate(sorted_candidates)
+        }
+        rankings.append([candidate_to_rank[candidate] for candidate in candidate_keys])
+
+    return rankings
+
+
+def read_all_embeddings(all_target_embeddings, all_candidate_embeddings, return_rankings=False):
     sim_scores, binaries = compare_all_embeddings(
         all_target_embeddings, 
         all_candidate_embeddings
         )
+
+    if return_rankings:
+        return rank_sim_scores(sim_scores), binaries
+
     # Convert dict of scores to array
     score_array = []
     for key in sim_scores:
