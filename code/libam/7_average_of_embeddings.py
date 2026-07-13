@@ -5,7 +5,6 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 
 DATA_PATH = "data/"
-OUTPUT_HEATMAP_PATH = 
 
 def plot_one_graph(binaries, results, rankings=False):
     n = len(binaries)
