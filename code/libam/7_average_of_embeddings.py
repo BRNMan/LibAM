@@ -5,14 +5,9 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 
 DATA_PATH = "data/"
-OUTPUT_HEATMAP_PATH = os.path.join(DATA_PATH, "function_embeddings_heatmap.png")
+OUTPUT_HEATMAP_PATH = 
 
-def plot_embeddings():
-    target_emb_path = os.path.join(DATA_PATH, "4_embedding/target_in9_embedding.json")
-    candidate_emb_path = os.path.join(DATA_PATH, "4_embedding/candidate_in9_embedding.json")
-    
-    results, binaries = read_embeddings_files(target_emb_path, candidate_emb_path)
-    print(binaries)
+def plot_one_graph(binaries, results, rankings=False):
     n = len(binaries)
     flat_scores = [v for row in results for v in row]
     vmax = max(flat_scores) if flat_scores else 1.0
@@ -22,8 +17,10 @@ def plot_embeddings():
     fig_size = max(8, min(24, 4 + 0.35 * n))
     fig, ax = plt.subplots(figsize=(fig_size, fig_size))
     im = ax.imshow(results, cmap="viridis", vmin=0.0, vmax=vmax, interpolation="nearest")
-
-    ax.set_title("Cosine Similarity of Average Function Embeddings of Target/Candidate files")
+    title = "Cosine Similarity of Average Function Embeddings of Target/Candidate files"
+    if rankings:
+        title = "Ranking of Average Function Embedding Cosine Similarity of Target/Candidate files"
+    ax.set_title(title)
     ax.set_xlabel("Candidate Binary")
     ax.set_ylabel("Object Binary")
     ax.set_xticks(range(n))
@@ -35,8 +32,20 @@ def plot_embeddings():
     cbar.set_label("Average Similarity Score")
 
     fig.tight_layout()
-    fig.savefig(OUTPUT_HEATMAP_PATH, dpi=220, bbox_inches="tight")
+    output_path = os.path.join(DATA_PATH, "function_embeddings_heatmap.png")
+    if rankings:
+        output_path = os.path.join(DATA_PATH, "function_embeddings_heatmap_ranking.png")
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
+
+def plot_embeddings():
+    target_emb_path = os.path.join(DATA_PATH, "4_embedding/target_in9_embedding.json")
+    candidate_emb_path = os.path.join(DATA_PATH, "4_embedding/candidate_in9_embedding.json")
+    
+    results, binaries = read_embeddings_files(target_emb_path, candidate_emb_path, False)
+    plot_one_graph(results, binaries, False)
+    results, binaries = read_embeddings_files(target_emb_path, candidate_emb_path, True)
+    plot_one_graph(results, binaries, True)
     return
 
 def read_embeddings_files(target_emb_filepath, candidate_emb_filepath, return_rankings=False):
