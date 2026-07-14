@@ -162,7 +162,7 @@ def tpl_detection_fast_utils_annoy_v2(
     cdd_subgraph_dict,
 ):
     reuse_flag = False
-    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "1") == "1"
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
     black_list = [
         "_start",
         "__libc_start_main",
