@@ -324,7 +324,7 @@ def tpl_detection_fast_utils_annoy_v2(
         if (abs(obj_num - cdd_num) - min(obj_num, cdd_num) > 2 * min(obj_num, cdd_num) and max(obj_num, cdd_num) > 100) or (abs(obj_num - cdd_num) > 200):
             alignment_temp = 0
 
-        if not ((obj_fcg["n_num"] >= 3 and cdd_fcg["n_num"] >= 3 and alignment_temp >= alignment_tred) or (obj_num <= 10 and cdd_num <= 10 and alignment_temp >= 2)):
+        if not ((obj_fcg["n_num"] >= 3 and cdd_fcg["n_num"] >= 3 and alignment_temp >= alignment_tred) or (obj_num <= 10 and cdd_num <= 10 and alignment_temp >= 3)):
             stats["skip_scale_guard"] += 1
             continue
 
