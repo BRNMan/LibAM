@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import argparse
 from collections import defaultdict
 
 from settings import DATA_PATH
@@ -14,6 +15,29 @@ OUTPUT_COVERAGE_CSV = os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_match
 HEATMAP_PNG = os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_similarity_heatmap.png")
 HEATMAP_COVERAGE_PNG = os.path.join(DATA_PATH, "6_tpl_fast_result", "binary_match_coverage_heatmap.png")
 SKIP_HEATMAP = False
+
+
+def _normalize_binary_name(name):
+    if name is None:
+        return None
+    return name[:-5] if name.endswith(".json") else name
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Build binary similarity matrices from TPL fast-area outputs."
+    )
+    parser.add_argument(
+        "--target-binary",
+        default=None,
+        help="Optional target binary name (with or without .json) to filter matrix rows.",
+    )
+    parser.add_argument(
+        "--candidate-binary",
+        default=None,
+        help="Optional candidate binary name (with or without .json) to filter matrix columns.",
+    )
+    return parser.parse_args()
 
 
 def _to_float(value):
@@ -63,7 +87,7 @@ def _parse_pair_from_sim_filename(filename):
     return parts[0], parts[1]
 
 
-def build_pair_scores(area_dir):
+def build_pair_scores(area_dir, target_filter=None, candidate_filter=None):
     pair_scores = defaultdict(list)
     all_objects = set()
     all_candidates = set()
@@ -74,6 +98,10 @@ def build_pair_scores(area_dir):
 
         object_name, candidate_name = _parse_pair_from_filename(name)
         if object_name is None:
+            continue
+        if target_filter and object_name not in target_filter:
+            continue
+        if candidate_filter and candidate_name not in candidate_filter:
             continue
 
         all_objects.add(object_name)
@@ -93,7 +121,7 @@ def build_pair_scores(area_dir):
     return pair_scores, sorted(all_objects), sorted(all_candidates)
 
 
-def build_pair_match_counts(area_dir, sim_funcs_dir):
+def build_pair_match_counts(area_dir, sim_funcs_dir, target_filter=None, candidate_filter=None):
     accepted_counts = defaultdict(int)
     potential_counts = {}
     all_objects = set()
@@ -105,6 +133,10 @@ def build_pair_match_counts(area_dir, sim_funcs_dir):
 
         object_name, candidate_name = _parse_pair_from_filename(name)
         if object_name is None:
+            continue
+        if target_filter and object_name not in target_filter:
+            continue
+        if candidate_filter and candidate_name not in candidate_filter:
             continue
 
         all_objects.add(object_name)
@@ -126,6 +158,10 @@ def build_pair_match_counts(area_dir, sim_funcs_dir):
 
             object_name, candidate_name = _parse_pair_from_sim_filename(name)
             if object_name is None:
+                continue
+            if target_filter and object_name not in target_filter:
+                continue
+            if candidate_filter and candidate_name not in candidate_filter:
                 continue
 
             all_objects.add(object_name)
@@ -254,16 +290,37 @@ def write_heatmap(output_png, object_binaries, candidate_binaries, matrix, title
 
 
 def main():
+    args = _parse_args()
+    if (args.target_binary is None) != (args.candidate_binary is None):
+        raise ValueError(
+            "Please provide both --target-binary and --candidate-binary, or neither."
+        )
+
+    target_filter = None
+    candidate_filter = None
+    if args.target_binary and args.candidate_binary:
+        target_filter = {_normalize_binary_name(args.target_binary)}
+        candidate_filter = {_normalize_binary_name(args.candidate_binary)}
+
     if not os.path.isdir(AREA_DIR):
         raise FileNotFoundError(f"Area directory not found: {AREA_DIR}")
 
-    pair_scores, object_binaries, candidate_binaries = build_pair_scores(AREA_DIR)
+    pair_scores, object_binaries, candidate_binaries = build_pair_scores(
+        AREA_DIR,
+        target_filter=target_filter,
+        candidate_filter=candidate_filter,
+    )
     if not object_binaries:
         raise RuntimeError(f"No *_feature_result.json files found under: {AREA_DIR}")
 
     matrix, avg_scores = build_matrix(pair_scores, object_binaries, candidate_binaries)
 
-    accepted_counts, potential_counts, objects_cov, candidates_cov = build_pair_match_counts(AREA_DIR, SIM_FUNCS_DIR)
+    accepted_counts, potential_counts, objects_cov, candidates_cov = build_pair_match_counts(
+        AREA_DIR,
+        SIM_FUNCS_DIR,
+        target_filter=target_filter,
+        candidate_filter=candidate_filter,
+    )
     coverage_matrix, coverage_ratio_dict = build_coverage_matrix(accepted_counts, potential_counts, objects_cov, candidates_cov)
 
     os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)

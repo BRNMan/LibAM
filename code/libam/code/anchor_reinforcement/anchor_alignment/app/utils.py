@@ -370,7 +370,7 @@ def tpl_detection_fast_utils_annoy_v2(
             target_reuse_area_dict[candidate_name][node_pair_str].append(node_pair_feature[node_pair_str])
             reuse_flag = True
             stats["accepted"] += 1
-            break
+            #break
 
     if enable_progress:
         tqdm.tqdm.write(
