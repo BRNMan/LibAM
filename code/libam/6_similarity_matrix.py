@@ -37,7 +37,10 @@ def _parse_args():
         default=None,
         help="Optional candidate binary name (with or without .json) to filter matrix columns.",
     )
-    return parser.parse_args()
+    # In notebooks (e.g., Colab), the kernel injects extra argv like "-f <kernel.json>".
+    # Use parse_known_args so script options still work under exec(...).
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def _to_float(value):

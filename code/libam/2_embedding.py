@@ -54,7 +54,10 @@ def _parse_args():
         default=None,
         help="Optional single candidate feature file name (with or without .json).",
     )
-    return parser.parse_args()
+    # In notebooks (e.g., Colab), the kernel injects extra argv like "-f <kernel.json>".
+    # Use parse_known_args so script options still work under exec(...).
+    args, _ = parser.parse_known_args()
+    return args
 
 
 

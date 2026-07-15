@@ -38,7 +38,10 @@ def _parse_args():
         default=None,
         help="Optional candidate binary name (with or without .json).",
     )
-    return parser.parse_args()
+    # In notebooks (e.g., Colab), the kernel injects extra argv like "-f <kernel.json>".
+    # Use parse_known_args so script options still work under exec(...).
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def _build_filtered_score_dir(score_dir, target_binary, candidate_binary):
