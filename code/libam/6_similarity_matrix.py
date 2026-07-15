@@ -37,6 +37,16 @@ def _parse_args():
         default=None,
         help="Optional candidate binary name (with or without .json) to filter matrix columns.",
     )
+    parser.add_argument(
+        "--plot-mode",
+        choices=["average", "coverage", "target-max-ratio"],
+        default="average",
+        help=(
+            "Which matrix to render as the main heatmap: "
+            "average final_score, accepted/potential coverage, or "
+            "accepted(target,candidate)/max accepted for that target."
+        ),
+    )
     # In notebooks (e.g., Colab), the kernel injects extra argv like "-f <kernel.json>".
     # Use parse_known_args so script options still work under exec(...).
     args, _ = parser.parse_known_args()
@@ -215,6 +225,36 @@ def build_coverage_matrix(accepted_counts, potential_counts, object_binaries, ca
     return matrix, ratio_dict
 
 
+def build_target_max_ratio_matrix(accepted_counts, object_binaries, candidate_binaries):
+    """
+    For each target-candidate pair, compute:
+      accepted_pairs(target, candidate) / max_accepted_pairs_for_target
+    If a target has no accepted pairs at all, ratios are 0.
+    """
+    target_max = {}
+    for obj in object_binaries:
+        max_count = 0
+        for cand in candidate_binaries:
+            count = accepted_counts.get((obj, cand), 0)
+            if count > max_count:
+                max_count = count
+        target_max[obj] = max_count
+
+    ratio_dict = {}
+    matrix = []
+    for obj in object_binaries:
+        row = []
+        denom = target_max.get(obj, 0)
+        for cand in candidate_binaries:
+            num = accepted_counts.get((obj, cand), 0)
+            ratio = (num / float(denom)) if denom > 0 else 0.0
+            ratio_dict[(obj, cand)] = ratio
+            row.append(ratio)
+        matrix.append(row)
+
+    return matrix, ratio_dict, target_max
+
+
 def write_csv(output_csv, object_binaries, candidate_binaries, matrix):
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -223,15 +263,17 @@ def write_csv(output_csv, object_binaries, candidate_binaries, matrix):
             writer.writerow([name] + [f"{v:.6f}" for v in row])
 
 
-def write_json(output_json, object_binaries, candidate_binaries, matrix, avg_scores):
+def write_json(output_json, object_binaries, candidate_binaries, matrix, pair_values, pair_values_key="pair_average_scores", extra_fields=None):
     data = {
         "target_binaries": object_binaries,
         "candidate_binaries": candidate_binaries,
         "matrix": matrix,
-        "pair_average_scores": {
-            f"{src}___{dst}": score for (src, dst), score in avg_scores.items()
+        pair_values_key: {
+            f"{src}___{dst}": value for (src, dst), value in pair_values.items()
         },
     }
+    if extra_fields:
+        data.update(extra_fields)
     with open(output_json, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -325,6 +367,11 @@ def main():
         candidate_filter=candidate_filter,
     )
     coverage_matrix, coverage_ratio_dict = build_coverage_matrix(accepted_counts, potential_counts, objects_cov, candidates_cov)
+    target_max_ratio_matrix, target_max_ratio_dict, target_max_counts = build_target_max_ratio_matrix(
+        accepted_counts,
+        object_binaries,
+        candidate_binaries,
+    )
 
     os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
     os.makedirs(os.path.dirname(OUTPUT_JSON), exist_ok=True)
@@ -342,10 +389,43 @@ def main():
         potential_counts,
     )
 
+    # Persist target-normalized accepted-count ratio matrix as an additional output.
+    target_max_ratio_json = OUTPUT_JSON.replace(".json", "_target_max_ratio.json")
+    write_json(
+        target_max_ratio_json,
+        object_binaries,
+        candidate_binaries,
+        target_max_ratio_matrix,
+        target_max_ratio_dict,
+        pair_values_key="pair_target_max_ratios",
+        extra_fields={
+            "target_max_accepted_counts": target_max_counts,
+        },
+    )
+
     heatmap_written = None
     if not SKIP_HEATMAP:
         os.makedirs(os.path.dirname(HEATMAP_PNG), exist_ok=True)
-        write_heatmap(HEATMAP_PNG, object_binaries, candidate_binaries, matrix)
+
+        if args.plot_mode == "average":
+            write_heatmap(HEATMAP_PNG, object_binaries, candidate_binaries, matrix)
+        elif args.plot_mode == "coverage":
+            write_heatmap(
+                HEATMAP_PNG,
+                objects_cov,
+                candidates_cov,
+                coverage_matrix,
+                title="Binary Match Coverage Heatmap (accepted / potential)",
+            )
+        else:
+            write_heatmap(
+                HEATMAP_PNG,
+                object_binaries,
+                candidate_binaries,
+                target_max_ratio_matrix,
+                title="Binary Accepted-Match Ratio Heatmap (accepted / target max accepted)",
+            )
+
         write_heatmap(
             HEATMAP_COVERAGE_PNG, objects_cov, candidates_cov, coverage_matrix,
             title="Binary Match Coverage Heatmap (accepted / potential)",
@@ -359,6 +439,8 @@ def main():
     print(f"JSON: {OUTPUT_JSON}")
     print(f"Coverage CSV: {OUTPUT_COVERAGE_CSV}")
     print(f"Coverage JSON: {OUTPUT_JSON.replace('.json', '_coverage.json')}")
+    print(f"Target-Max Ratio JSON: {target_max_ratio_json}")
+    print(f"Plot mode: {args.plot_mode}")
     if heatmap_written:
         print(f"Heatmap: {heatmap_written}")
         print(f"Coverage Heatmap: {HEATMAP_COVERAGE_PNG}")
