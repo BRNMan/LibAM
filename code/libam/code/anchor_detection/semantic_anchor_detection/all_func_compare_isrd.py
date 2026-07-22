@@ -27,7 +27,8 @@ def select_diverse_top_matches(func_score_dict, top_k=100, per_binary_cap=20):
     Keep nearest matches while limiting how many come from the same candidate binary.
     This prevents one binary/version from monopolizing the top-k list.
     """
-    selected = []
+    matches = []
+    scores = []
     per_bin_count = {}
 
     for match_key, score in sorted(func_score_dict.items(), key=lambda d: d[1]):
@@ -35,33 +36,13 @@ def select_diverse_top_matches(func_score_dict, top_k=100, per_binary_cap=20):
         used = per_bin_count.get(candidate_binary, 0)
         if used >= per_binary_cap:
             continue
-        selected.append((match_key, score))
+        matches.append(match_key)
+        scores.append(score)
         per_bin_count[candidate_binary] = used + 1
-        if len(selected) >= top_k:
+        if len(matches) >= top_k:
             break
 
-    return selected
-
-
-def select_global_top_matches(selected_items, max_total=50000, per_candidate_cap=5000):
-    """
-    Apply a second-stage global cap after per-function selection.
-    This keeps output size bounded even when a target binary has many functions.
-    """
-    final_items = []
-    per_candidate_count = {}
-
-    for match_key, score in sorted(selected_items, key=lambda d: d[1]):
-        candidate_binary = match_key.split("||||", 1)[1].split("----", 1)[0]
-        used = per_candidate_count.get(candidate_binary, 0)
-        if used >= per_candidate_cap:
-            continue
-        final_items.append((match_key, score))
-        per_candidate_count[candidate_binary] = used + 1
-        if len(final_items) >= max_total:
-            break
-
-    return final_items
+    return matches, scores
 
 
 def _safe_json_dump(data, path):
@@ -116,18 +97,16 @@ def save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_l
 def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vector, all_candidates_function_vec, score_opath, score_opath2, time_opath, embed_path):
     function_blocklist = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
     enable_diag = os.environ.get("LIBAM_COMPARE_DIAG", "1") == "1"
-    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "250")))
-    dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "0.700"))
-    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "70")))
-    per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "50")))
-    max_total = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_TOTAL", "5000")))
-    per_cdd_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_MAX_PER_CDD_BIN", "5000")))
+    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "200")))
+    dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.00"))
+    per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "20")))
+    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "40")))
     for target_binary_name in tqdm.tqdm(target_func_keys_list, desc="Target Binary Progress"):
         if target_binary_name in all_targets_function_vector and not os.path.exists(os.path.join(time_opath, target_binary_name+"isrd_triple_loss_time.json")):
             time_dict = {}
             start = time.time()
             score_dict = {}
-            deal_score_dict = {}
+            processed_score_dict = {}
             raw_score_dict = {}
             cur_target_function_vec =  all_targets_function_vector[target_binary_name]
     
@@ -142,7 +121,6 @@ def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vect
                 all_candidate_id_func_dict = json.load(open(os.path.join(embed_path, "all_candidate_func.json"), "r"))
                 all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
                 
-            candidate_bin_dict = {}
             for target_funcname in tqdm.tqdm(cur_target_function_vec, desc=f"\t Detecting candidate anchors in {target_binary_name}", position=0, leave=True):
                 if target_funcname in function_blocklist:
                     continue
@@ -160,25 +138,15 @@ def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vect
                     else:
                         break
                         
-            selected_candidate_bins = set()
-            pre_global_selected = []
             for detect_func in score_dict:
-                object_cdd_func_list = select_diverse_top_matches(
+                matches, scores = select_diverse_top_matches(
                     score_dict[detect_func],
                     top_k=topk_per_func,
                     per_binary_cap=per_bin_cap,
                 )
-                for object_cdd_func_item in object_cdd_func_list:
-                    match_key = target_binary_name+"----"+detect_func+"||||"+object_cdd_func_item[0]
-                    pre_global_selected.append((match_key, object_cdd_func_item[1]))
-                    selected_candidate_bins.add(object_cdd_func_item[0].split("----", 1)[0])
-
-            for match_key, score in select_global_top_matches(
-                pre_global_selected,
-                max_total=max_total,
-                per_candidate_cap=per_cdd_bin_cap,
-            ):
-                deal_score_dict[match_key] = score
+                for i in range(len(matches)):
+                    match_key = target_binary_name + "----" + detect_func + "||||" + matches[i]
+                    processed_score_dict[match_key] = scores[i]
 
             if enable_diag:
                 raw_candidate_bins = set()
@@ -186,27 +154,23 @@ def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vect
                     for match_key in score_dict[func_name]:
                         raw_candidate_bins.add(match_key.split("----", 1)[0])
                 print(
-                    "[diag] {}: raw_bins={} selected_bins={} raw_pairs={} pre_global_selected={} selected_pairs={} matched_funcs={} ann_top_n={} dist_th={} topk_per_func={} per_bin_cap={} max_total={} per_cdd_bin_cap={}".format(
+                    "[diag] {}: raw_bins={} raw_pairs={} selected_pairs={} matched_funcs={} ann_top_n={} dist_th={} topk_per_func={} per_bin_cap={}".format(
                         target_binary_name,
                         len(raw_candidate_bins),
-                        len(selected_candidate_bins),
                         len(raw_score_dict),
-                        len(pre_global_selected),
-                        len(deal_score_dict),
+                        len(processed_score_dict),
                         len(score_dict),
                         ann_top_n,
                         dist_threshold,
                         topk_per_func,
                         per_bin_cap,
-                        max_total,
-                        per_cdd_bin_cap,
                     )
                 )
             end = time.time()
             run_time = end - start
             time_dict[target_binary_name] = run_time
             json.dump(raw_score_dict, open(os.path.join(score_opath, target_binary_name+"_reuse_func_dict.json"), "w"))
-            json.dump(deal_score_dict, open(os.path.join(score_opath2, target_binary_name+"_reuse_func_dict.json"), "w"))
+            json.dump(processed_score_dict, open(os.path.join(score_opath2, target_binary_name+"_reuse_func_dict.json"), "w"))
             json.dump(time_dict, open(os.path.join(time_opath, target_binary_name+"isrd_triple_loss_time.json"), "w"))    
 
 
