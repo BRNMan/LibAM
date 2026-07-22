@@ -47,6 +47,8 @@ def judge_in_graph(object_graph, candidate_graph, matched_func_list):
     obj_node_list = list(object_graph.nodes())
     cdd_node_list = list(candidate_graph.nodes())
 
+    debug_func = "sub_543F6"
+
     for matched_func in matched_func_list:
         obj_func = matched_func[0]
         cdd_func = matched_func[1]
@@ -56,6 +58,9 @@ def judge_in_graph(object_graph, candidate_graph, matched_func_list):
             obj_func = obj_func.split("|||")[-1]
         if "|||" in cdd_func:
             cdd_func = cdd_func.split("|||")[-1]
+
+        if debug_func in obj_func or debug_func in cdd_func:
+            print(f"[DEBUG judge_in_graph] {obj_func} vs {cdd_func}: in_obj={obj_func in obj_node_list}, in_cdd={cdd_func in cdd_node_list}")
 
         if obj_func in obj_node_list and cdd_func in cdd_node_list:
             in_graph_node.append([obj_func, cdd_func, anchor_dist])
