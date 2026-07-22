@@ -100,7 +100,7 @@ def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vect
     ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "200")))
     dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.00"))
     per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "20")))
-    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "40")))
+    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "30")))
     for target_binary_name in tqdm.tqdm(target_func_keys_list, desc="Target Binary Progress"):
         if target_binary_name in all_targets_function_vector and not os.path.exists(os.path.join(time_opath, target_binary_name+"isrd_triple_loss_time.json")):
             time_dict = {}
