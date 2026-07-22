@@ -38,6 +38,10 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
 ):
     import psutil
     disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
+    collect_pair_stats = os.environ.get("LIBAM_TPL_COLLECT_PAIR_STATS", "0") == "1"
+    pair_stats_dir = os.path.join(time_path, "pair_stats")
+    if collect_pair_stats:
+        os.makedirs(pair_stats_dir, exist_ok=True)
 
     process = psutil.Process(os.getpid())
     memory_log = []
@@ -102,7 +106,7 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
             mem_after_cdd_load = process.memory_info().rss / 1024 / 1024
             mem_before_detection = process.memory_info().rss / 1024 / 1024
 
-            reuse_flag, reuse_dict = tpl_detection_fast_core_annoy(
+            core_result = tpl_detection_fast_core_annoy(
                 object_name,
                 candidate_name,
                 object_fcg,
@@ -117,6 +121,20 @@ def tpl_detection_fast_one_annoy_simple_with_logging(
                 tar_subgraph,
                 cdd_subgraph_dict.get(candidate_name, {}),
             )
+
+            pair_stats = []
+            if isinstance(core_result, tuple) and len(core_result) == 3:
+                reuse_flag, reuse_dict, pair_stats = core_result
+            else:
+                reuse_flag, reuse_dict = core_result
+
+            if collect_pair_stats:
+                stats_out_path = os.path.join(
+                    pair_stats_dir,
+                    f"{object_name}___{candidate_name}_pair_stats.json",
+                )
+                with open(stats_out_path, "w") as sf:
+                    json.dump(pair_stats, sf)
 
             mem_after_detection = process.memory_info().rss / 1024 / 1024
 

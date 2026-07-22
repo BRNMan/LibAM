@@ -6,6 +6,18 @@ import torch.nn.functional as F
 import tqdm
 
 
+def _extract_sub_addr(func_name):
+    if not isinstance(func_name, str):
+        return None
+    name = func_name.split("|||", 1)[-1]
+    if not name.startswith("sub_"):
+        return None
+    try:
+        return int(name[4:], 16)
+    except ValueError:
+        return None
+
+
 def build_local_fcg_from_afcg(func_name, afcg_dict):
     # Fallback local structure for no-GNN mode: root function + its AFCG children.
     children = []
@@ -36,11 +48,17 @@ def judge_in_graph(object_graph, candidate_graph, matched_func_list):
     cdd_node_list = list(candidate_graph.nodes())
 
     for matched_func in matched_func_list:
-        if "|||" in matched_func[0]:
-            matched_func[0] = matched_func[0].split("|||")[-1]
-            matched_func[1] = matched_func[1].split("|||")[-1]
-        if matched_func[0] in obj_node_list and matched_func[1] in cdd_node_list:
-            in_graph_node.append(matched_func)
+        obj_func = matched_func[0]
+        cdd_func = matched_func[1]
+        anchor_dist = matched_func[2] if len(matched_func) > 2 else None
+
+        if "|||" in obj_func:
+            obj_func = obj_func.split("|||")[-1]
+        if "|||" in cdd_func:
+            cdd_func = cdd_func.split("|||")[-1]
+
+        if obj_func in obj_node_list and cdd_func in cdd_node_list:
+            in_graph_node.append([obj_func, cdd_func, anchor_dist])
 
     return in_graph_node
 
@@ -77,9 +95,13 @@ def get_cdd_func_dict(object_cdd_func_dict):
         cdd_item = matched_item[0].split("||||")[1].split("----")[0]
         obj_func_item = matched_item[0].split("||||")[0].split("----")[1]
         cdd_func_item = matched_item[0].split("||||")[1].split("----")[1]
+        try:
+            anchor_dist = float(matched_item[1])
+        except (TypeError, ValueError):
+            anchor_dist = None
         if cdd_item not in cdd_project_dict:
             cdd_project_dict[cdd_item] = []
-        cdd_project_dict[cdd_item].append(["".join(obj_func_item), "".join(cdd_func_item)])
+        cdd_project_dict[cdd_item].append(["".join(obj_func_item), "".join(cdd_func_item), anchor_dist])
     return cdd_project_dict
 
 
@@ -163,6 +185,8 @@ def tpl_detection_fast_utils_annoy_v2(
 ):
     reuse_flag = False
     disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
+    collect_pair_stats = os.environ.get("LIBAM_TPL_COLLECT_PAIR_STATS", "0") == "1"
+    pair_stats = []
     black_list = [
         "_start",
         "__libc_start_main",
@@ -220,6 +244,44 @@ def tpl_detection_fast_utils_annoy_v2(
     )
 
     for pair_idx, func_pair in enumerate(pair_iter, start=1):
+        pair_record = {
+            "object_name": object_name,
+            "candidate_name": candidate_name,
+            "pair_index": pair_idx,
+            "obj_func": func_pair[0],
+            "cdd_func": func_pair[1],
+            "obj_addr_int": _extract_sub_addr(func_pair[0]),
+            "cdd_addr_int": _extract_sub_addr(func_pair[1]),
+            "obj_addr_hex": None,
+            "cdd_addr_hex": None,
+            "anchor_distance": None,
+            "gnn_score": None,
+            "align_rate": None,
+            "alignment_num": None,
+            "obj_n_num": None,
+            "cdd_n_num": None,
+            "obj_unique_funcs": None,
+            "cdd_unique_funcs": None,
+            "final_score": None,
+        }
+        if pair_record["obj_addr_int"] is not None:
+            pair_record["obj_addr_hex"] = hex(pair_record["obj_addr_int"])
+        if pair_record["cdd_addr_int"] is not None:
+            pair_record["cdd_addr_hex"] = hex(pair_record["cdd_addr_int"])
+        if len(func_pair) > 2:
+            try:
+                pair_record["anchor_distance"] = float(func_pair[2])
+            except (TypeError, ValueError):
+                pair_record["anchor_distance"] = None
+
+        def _store_pair(accepted, reason):
+            if not collect_pair_stats:
+                return
+            rec = dict(pair_record)
+            rec["accepted"] = accepted
+            rec["reject_reason"] = reason
+            pair_stats.append(rec)
+
         if enable_progress and pair_idx % 50 == 0:
             pair_iter.set_postfix(
                 accepted=stats["accepted"],
@@ -230,11 +292,22 @@ def tpl_detection_fast_utils_annoy_v2(
 
         obj_afcg = get_afcg_one_annoy(func_pair[0], obj_sim_funcs, tar_afcg_dict)
         cdd_afcg = get_afcg_one_annoy(func_pair[1], cdd_sim_funcs, cdd_afcg_dict)
+        
+        # DEBUG: Track a specific function
+        debug_func = "rpl_mbrtowc"
+        is_debug = debug_func in func_pair[0]
+        
         if len(obj_afcg) == 0 or len(cdd_afcg) == 0:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - empty_afcg (obj_afcg={len(obj_afcg)}, cdd_afcg={len(cdd_afcg)})")
             stats["skip_empty_afcg"] += 1
+            _store_pair(False, "skip_empty_afcg")
             continue
         if func_pair[1] in black_list:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - blacklist")
             stats["skip_blacklist"] += 1
+            _store_pair(False, "skip_blacklist")
             continue
 
         if disable_gnn:
@@ -243,7 +316,10 @@ def tpl_detection_fast_utils_annoy_v2(
             gnn_score = 1.0
         else:
             if func_pair[0] not in tar_subgraph or func_pair[1] not in cdd_subgraph_dict:
+                if is_debug:
+                    print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - missing_subgraph (in_tar={func_pair[0] in tar_subgraph}, in_cdd={func_pair[1] in cdd_subgraph_dict})")
                 stats["skip_missing_subgraph"] += 1
+                _store_pair(False, "skip_missing_subgraph")
                 continue
             obj_fcg = tar_subgraph[func_pair[0]]
             cdd_fcg = cdd_subgraph_dict[func_pair[1]]
@@ -253,12 +329,21 @@ def tpl_detection_fast_utils_annoy_v2(
             gnn_score = F.cosine_similarity(obj_embedding, cdd_embedding, eps=1e-10, dim=1)
             gnn_score = (1 + gnn_score.cpu().detach().numpy()[0]) / 2.0
 
+        pair_record["gnn_score"] = float(gnn_score)
+        pair_record["obj_n_num"] = int(obj_fcg.get("n_num", 0))
+        pair_record["cdd_n_num"] = int(cdd_fcg.get("n_num", 0))
+
         if gnn_score < 0.8:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_gnn (score={gnn_score:.4f} < 0.8)")
             stats["skip_low_gnn"] += 1
+            _store_pair(False, "skip_low_gnn")
             continue
 
         obj_num = len(set(obj_fcg["feature"]))
         cdd_num = len(set(cdd_fcg["feature"]))
+        pair_record["obj_unique_funcs"] = int(obj_num)
+        pair_record["cdd_unique_funcs"] = int(cdd_num)
 
         obj_com_num = obj_sim_num = 0
         for obj_func in set(obj_fcg["feature"]):
@@ -275,16 +360,24 @@ def tpl_detection_fast_utils_annoy_v2(
                     cdd_sim_num += 1
 
         if obj_com_num == 0 or cdd_com_num == 0:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - no_child_funcs (obj_com={obj_com_num}, cdd_com={cdd_com_num})")
             stats["skip_no_child_funcs_found"] += 1
+            _store_pair(False, "skip_no_child_funcs_found")
             continue
         if obj_com_num <= cdd_com_num:
             align_rate = obj_sim_num / obj_com_num
         else:
             align_rate = cdd_sim_num / cdd_com_num
 
+        pair_record["align_rate"] = float(align_rate)
+
         align_rate_score = 0.3 * align_rate + 0.7
         if gnn_score * align_rate_score < 0.8:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_align_rate (gnn={gnn_score:.4f}, align_rate={align_rate:.4f}, score={gnn_score*align_rate_score:.4f} < 0.8)")
             stats["skip_low_align_rate"] += 1
+            _store_pair(False, "skip_low_align_rate")
             continue
 
         l_max = 0
@@ -317,15 +410,23 @@ def tpl_detection_fast_utils_annoy_v2(
                 break
 
         if len(lenth_max) < 2:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - short_alignment (len={len(lenth_max)} < 2)")
             stats["skip_short_alignment"] += 1
+            _store_pair(False, "skip_short_alignment")
             continue
 
         alignment_temp = len(lenth_max)
         if (abs(obj_num - cdd_num) - min(obj_num, cdd_num) > 2 * min(obj_num, cdd_num) and max(obj_num, cdd_num) > 100) or (abs(obj_num - cdd_num) > 200):
             alignment_temp = 0
 
+        pair_record["alignment_num"] = int(alignment_temp)
+
         if not ((obj_fcg["n_num"] >= 3 and cdd_fcg["n_num"] >= 3 and alignment_temp >= alignment_tred) or (obj_num <= 10 and cdd_num <= 10 and alignment_temp >= 3)):
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - scale_guard (obj_n={obj_fcg['n_num']}, cdd_n={cdd_fcg['n_num']}, align_temp={alignment_temp})")
             stats["skip_scale_guard"] += 1
+            _store_pair(False, "skip_scale_guard")
             continue
 
         node_pair = func_pair
@@ -350,7 +451,10 @@ def tpl_detection_fast_utils_annoy_v2(
         node_fcg_scale_diff_score = 0.3 * min(node_fcg_scale_pair[0], node_fcg_scale_pair[1]) / max(node_fcg_scale_pair[0], node_fcg_scale_pair[1]) + 0.7
 
         if node_alignment_num_score <= 0 or node_fcg_scale_pair[0] < 2 or node_fcg_scale_pair[1] < 2:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - final_guard (align_num_score={node_alignment_num_score}, scale_pair={node_fcg_scale_pair})")
             stats["skip_final_guard"] += 1
+            _store_pair(False, "skip_final_guard")
             continue
 
         final_score = RARM_score(
@@ -361,6 +465,7 @@ def tpl_detection_fast_utils_annoy_v2(
             align_rate,
         )
         node_pair_feature[node_pair_str]["final_score"] = final_score
+        pair_record["final_score"] = float(final_score)
 
         if (final_score >= 0.8 and node_alignment_num_score >= alignment_tred) or (final_score >= 0.95 and node_alignment_num_score >= 2):
             if candidate_name not in target_reuse_area_dict:
@@ -370,6 +475,9 @@ def tpl_detection_fast_utils_annoy_v2(
             target_reuse_area_dict[candidate_name][node_pair_str].append(node_pair_feature[node_pair_str])
             reuse_flag = True
             stats["accepted"] += 1
+            _store_pair(True, None)
+        else:
+            _store_pair(False, "skip_accept_threshold")
         
         if stats["accepted"] >= 15:
             break
@@ -395,5 +503,5 @@ def tpl_detection_fast_utils_annoy_v2(
         )
 
     if reuse_flag:
-        return reuse_flag, target_reuse_area_dict
-    return reuse_flag, {}
+        return reuse_flag, target_reuse_area_dict, pair_stats
+    return reuse_flag, {}, pair_stats
