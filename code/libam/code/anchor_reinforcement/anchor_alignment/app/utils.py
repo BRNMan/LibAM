@@ -58,6 +58,9 @@ def judge_in_graph(object_graph, candidate_graph, matched_func_list):
             cdd_func = cdd_func.split("|||")[-1]
 
         if obj_func in obj_node_list and cdd_func in cdd_node_list:
+            if "sub_543F6" in obj_func:
+                print("WOOOOOOOOOO")
+                len(in_graph_node)
             in_graph_node.append([obj_func, cdd_func, anchor_dist])
 
     return in_graph_node
@@ -210,8 +213,6 @@ def tpl_detection_fast_utils_annoy_v2(
     cdd_sim_funcs = []
     cdd_sim_funcs_dict = {}
     for func_pair in matched_func_ingraph_list:
-        if "sub_543F6" in func_pair[0]:
-            print("DEBUG: Adding sub: ", func_pair[0], func_pair[1])
         if func_pair[0] not in obj_sim_funcs:
             obj_sim_funcs.append(func_pair[0])
             obj_sim_funcs_dict[func_pair[0]] = []
