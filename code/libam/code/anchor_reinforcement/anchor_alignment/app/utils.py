@@ -295,7 +295,7 @@ def tpl_detection_fast_utils_annoy_v2(
         
         # DEBUG: Track a specific function
         debug_func = "rpl_mbrtowc"
-        is_debug = debug_func in func_pair[0]
+        is_debug = debug_func in func_pair[0] or (debug_func in func_pair[1])
         
         if len(obj_afcg) == 0 or len(cdd_afcg) == 0:
             if is_debug:
