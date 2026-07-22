@@ -479,6 +479,8 @@ def tpl_detection_fast_utils_annoy_v2(
             stats["accepted"] += 1
             _store_pair(True, None)
         else:
+            if is_debug:
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - accept_threshold (final_score={final_score:.4f}, alignment_num={node_alignment_num_score}, need score>=0.8+align>={alignment_tred} OR score>=0.95+align>=2)")
             _store_pair(False, "skip_accept_threshold")
         
         if stats["accepted"] >= 15:
