@@ -1,4 +1,4 @@
-import json, os, sys, pickle, tqdm, time
+import json, os, sys, pickle, tqdm, time, random
 import numpy as np
 from multiprocessing import Process
 sys.path.append(".")
@@ -101,6 +101,14 @@ def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vect
     dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.00"))
     per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "20")))
     topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "30")))
+    shuffle_target_funcs = os.environ.get("LIBAM_COMPARE_SHUFFLE_TARGET_FUNCS", "1") == "1"
+    shuffle_seed_raw = os.environ.get("LIBAM_COMPARE_SHUFFLE_SEED", "42")
+    shuffle_seed = None
+    if shuffle_seed_raw is not None and shuffle_seed_raw != "":
+        try:
+            shuffle_seed = int(shuffle_seed_raw)
+        except ValueError:
+            shuffle_seed = None
     for target_binary_name in tqdm.tqdm(target_func_keys_list, desc="Target Binary Progress"):
         if target_binary_name in all_targets_function_vector and not os.path.exists(os.path.join(time_opath, target_binary_name+"isrd_triple_loss_time.json")):
             time_dict = {}
@@ -121,7 +129,16 @@ def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vect
                 all_candidate_id_func_dict = json.load(open(os.path.join(embed_path, "all_candidate_func.json"), "r"))
                 all_candidate_id_bin_dict = json.load(open(os.path.join(embed_path, "all_candidate_bin.json"), "r"))
                 
-            for target_funcname in tqdm.tqdm(cur_target_function_vec, desc=f"\t Detecting candidate anchors in {target_binary_name}", position=0, leave=True):
+            target_funcnames = list(cur_target_function_vec.keys())
+            if shuffle_target_funcs:
+                if shuffle_seed is None:
+                    random.shuffle(target_funcnames)
+                else:
+                    # Deterministic per-binary shuffle for reproducible experiments.
+                    rng = random.Random(f"{shuffle_seed}:{target_binary_name}")
+                    rng.shuffle(target_funcnames)
+
+            for target_funcname in tqdm.tqdm(target_funcnames, desc=f"\t Detecting candidate anchors in {target_binary_name}", position=0, leave=True):
                 if target_funcname in function_blocklist:
                     continue
                 query_result, distance_result = candidate_index.get_nns_by_vector(
