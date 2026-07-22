@@ -184,7 +184,7 @@ def tpl_detection_fast_utils_annoy_v2(
     cdd_subgraph_dict,
 ):
     reuse_flag = False
-    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "1") == "1"
     collect_pair_stats = os.environ.get("LIBAM_TPL_COLLECT_PAIR_STATS", "0") == "1"
     pair_stats = []
     black_list = [
@@ -479,8 +479,6 @@ def tpl_detection_fast_utils_annoy_v2(
             stats["accepted"] += 1
             _store_pair(True, None)
         else:
-            if is_debug:
-                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - accept_threshold (final_score={final_score:.4f}, alignment_num={node_alignment_num_score}, need score>=0.8+align>={alignment_tred} OR score>=0.95+align>=2)")
             _store_pair(False, "skip_accept_threshold")
         
         if stats["accepted"] >= 15:
