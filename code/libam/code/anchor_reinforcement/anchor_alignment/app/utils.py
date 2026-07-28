@@ -483,7 +483,14 @@ def tpl_detection_fast_utils_annoy_v2(
         else:
             _store_pair(False, "skip_accept_threshold")
         
-        if stats["accepted"] >= 15:
+        if stats["accepted"] >= 10:
+            break
+        
+        # Early exit: if we've searched 20% of pairs with no matches, stop
+        threshold_pairs = int(stats["pairs_total"] * 0.20)
+        if pair_idx >= threshold_pairs and stats["accepted"] == 0:
+            if enable_progress:
+                tqdm.tqdm.write(f"[tpl-diag] Stopping early: searched {pair_idx}/{stats['pairs_total']} pairs (20% threshold), found 0 matches")
             break
 
     if enable_progress:
