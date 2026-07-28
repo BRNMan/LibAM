@@ -84,7 +84,7 @@ def filter_200_lib(object_cdd_func_dict):
 
 
 def filter_500_anchor(object_cdd_func_dict):
-    return sorted(object_cdd_func_dict.items(), key=lambda d: d[1], reverse=True)
+    return sorted(object_cdd_func_dict.items(), key=lambda d: d[1], reverse=False)
 
 
 def get_cdd_func_dict(object_cdd_func_dict):
