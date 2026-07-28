@@ -184,7 +184,7 @@ def tpl_detection_fast_utils_annoy_v2(
     cdd_subgraph_dict,
 ):
     reuse_flag = False
-    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "1") == "1"
+    disable_gnn = os.environ.get("LIBAM_TPL_DISABLE_GNN", "0") == "1"
     collect_pair_stats = os.environ.get("LIBAM_TPL_COLLECT_PAIR_STATS", "0") == "1"
     pair_stats = []
     black_list = [
@@ -333,7 +333,11 @@ def tpl_detection_fast_utils_annoy_v2(
         pair_record["obj_n_num"] = int(obj_fcg.get("n_num", 0))
         pair_record["cdd_n_num"] = int(cdd_fcg.get("n_num", 0))
 
-        if gnn_score < 0.8:
+        # Lower the GNN threshold for pairs with a very close anchor embedding match.
+        anchor_dist = func_pair[2] if len(func_pair) > 2 and func_pair[2] is not None else 1.0
+        gnn_threshold = 0.8 - max(0.0, (0.5 - anchor_dist)) * 0.5
+
+        if gnn_score < gnn_threshold:
             if is_debug:
                 print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_gnn (score={gnn_score:.4f} < 0.8)")
             stats["skip_low_gnn"] += 1
