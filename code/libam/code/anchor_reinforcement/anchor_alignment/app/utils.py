@@ -346,7 +346,7 @@ def tpl_detection_fast_utils_annoy_v2(
 
         # Lower the GNN threshold for pairs with a very close anchor embedding match.
         anchor_dist = func_pair[2] if len(func_pair) > 2 and func_pair[2] is not None else 1.0
-        gnn_threshold = 0.8 - max(0.0, (0.5 - anchor_dist)) * 0.5
+        gnn_threshold = 0.8 - max(0.0, (0.5 - anchor_dist)) * 1.0
 
         if gnn_score < gnn_threshold:
             if is_debug:
@@ -494,7 +494,7 @@ def tpl_detection_fast_utils_annoy_v2(
         else:
             _store_pair(False, "skip_accept_threshold")
         
-        if stats["accepted"] >= 10:
+        if stats["accepted"] >= 5:
             break
 
     if enable_progress:
