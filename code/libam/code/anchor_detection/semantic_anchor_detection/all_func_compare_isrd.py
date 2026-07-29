@@ -97,10 +97,10 @@ def save_all_candidate_index(candidate_binary_func_vec, embed_path, black_func_l
 def func_compare_annoy_fast_one(target_func_keys_list, all_targets_function_vector, all_candidates_function_vec, score_opath, score_opath2, time_opath, embed_path):
     function_blocklist = ["_start", "__libc_start_main", "main", "mainSort.isra.1", "mainSort.isra.0", "usage", "mainGtU.part.0", "mainSort", "__libc_csu_init", "frame_dummy", "deregister_tm_clones", "register_tm_clones"]
     enable_diag = os.environ.get("LIBAM_COMPARE_DIAG", "1") == "1"
-    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "100")))
+    ann_top_n = max(1, int(os.environ.get("LIBAM_COMPARE_ANN_TOPN", "150")))
     dist_threshold = float(os.environ.get("LIBAM_COMPARE_DIST_THRESHOLD", "1.00"))
     per_bin_cap = max(1, int(os.environ.get("LIBAM_COMPARE_PER_BIN_CAP", "20")))
-    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "10")))
+    topk_per_func = max(1, int(os.environ.get("LIBAM_COMPARE_TOPK_PER_FUNC", "30")))
     shuffle_target_funcs = os.environ.get("LIBAM_COMPARE_SHUFFLE_TARGET_FUNCS", "1") == "1"
     shuffle_seed_raw = os.environ.get("LIBAM_COMPARE_SHUFFLE_SEED", "42")
     shuffle_seed = None
