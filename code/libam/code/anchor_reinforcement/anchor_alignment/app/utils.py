@@ -368,7 +368,7 @@ def tpl_detection_fast_utils_annoy_v2(
         obj_afcg = get_afcg_one_annoy(func_pair[0], obj_sim_funcs, tar_afcg_dict)
         cdd_afcg = get_afcg_one_annoy(func_pair[1], cdd_sim_funcs, cdd_afcg_dict)
         
-        is_debug = any(token in func_pair[0] or token in func_pair[1] for token in debug_filters)
+        is_debug = False
         
         if len(obj_afcg) == 0 or len(cdd_afcg) == 0:
             if is_debug:
