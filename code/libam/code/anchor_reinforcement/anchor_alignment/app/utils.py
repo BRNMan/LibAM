@@ -305,8 +305,8 @@ def tpl_detection_fast_utils_annoy_v2(
         cdd_afcg = get_afcg_one_annoy(func_pair[1], cdd_sim_funcs, cdd_afcg_dict)
         
         # DEBUG: Track a specific function
-        # debug_func = "poopoopoop"
-        is_debug = False # debug_func in func_pair[0] or (debug_func in func_pair[1])
+        debug_func = "rpl_mbrtowc"
+        is_debug = debug_func in func_pair[0] or (debug_func in func_pair[1])
         
         if len(obj_afcg) == 0 or len(cdd_afcg) == 0:
             if is_debug:
