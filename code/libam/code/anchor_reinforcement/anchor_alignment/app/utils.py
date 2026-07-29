@@ -42,6 +42,12 @@ def get_afcg_one_annoy(func_pair, sim_funcs, all_afcg):
     return afcg
 
 
+def _is_anchor_eligible(func_name, sim_funcs, afcg_dict, min_anchor_children=1):
+    # A function is anchor-eligible only if it has enough AFCG children that are also anchors.
+    afcg_children = get_afcg_one_annoy(func_name, sim_funcs, afcg_dict)
+    return len(afcg_children) >= min_anchor_children
+
+
 def judge_in_graph(object_graph, candidate_graph, matched_func_list):
     in_graph_node = []
     obj_node_list = list(object_graph.nodes())
@@ -207,6 +213,10 @@ def tpl_detection_fast_utils_annoy_v2(
     debug_filter_raw = os.environ.get("LIBAM_TPL_DEBUG_FUNC", "rpl_mbrtowc")
     debug_filters = [item.strip() for item in debug_filter_raw.split(",") if item.strip()]
     debug_all_low_align = os.environ.get("LIBAM_TPL_DEBUG_ALL_LOW_ALIGN", "0") == "1"
+    try:
+        min_anchor_children = max(1, int(os.environ.get("LIBAM_TPL_MIN_ANCHOR_CHILDREN", "1")))
+    except ValueError:
+        min_anchor_children = 1
     try:
         debug_sample_limit = max(1, int(os.environ.get("LIBAM_TPL_DEBUG_SAMPLE_LIMIT", "8")))
     except ValueError:
@@ -417,8 +427,13 @@ def tpl_detection_fast_utils_annoy_v2(
         obj_com_num = obj_sim_num = 0
         obj_hit_examples = []
         obj_miss_examples = []
+        obj_ineligible_examples = []
         for obj_func in obj_feature_set:
             if obj_func in obj_com_funcs:
+                if not _is_anchor_eligible(obj_func, obj_sim_funcs, tar_afcg_dict, min_anchor_children=min_anchor_children):
+                    if is_debug or debug_all_low_align:
+                        obj_ineligible_examples.append(obj_func)
+                    continue
                 obj_com_num += 1
                 related_cdd = set(obj_sim_funcs_dict.get(obj_func, []))
                 overlap = sorted(list(related_cdd.intersection(cdd_feature_set)))
@@ -432,8 +447,13 @@ def tpl_detection_fast_utils_annoy_v2(
         cdd_com_num = cdd_sim_num = 0
         cdd_hit_examples = []
         cdd_miss_examples = []
+        cdd_ineligible_examples = []
         for cdd_func in cdd_feature_set:
             if cdd_func in cdd_com_funcs:
+                if not _is_anchor_eligible(cdd_func, cdd_sim_funcs, cdd_afcg_dict, min_anchor_children=min_anchor_children):
+                    if is_debug or debug_all_low_align:
+                        cdd_ineligible_examples.append(cdd_func)
+                    continue
                 cdd_com_num += 1
                 related_obj = set(cdd_sim_funcs_dict.get(cdd_func, []))
                 overlap = sorted(list(related_obj.intersection(obj_feature_set)))
@@ -446,6 +466,9 @@ def tpl_detection_fast_utils_annoy_v2(
 
         if obj_com_num == 0 or cdd_com_num == 0:
             if is_debug:
+                print(
+                    f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: ineligible_anchors (obj={obj_ineligible_examples[:debug_sample_limit]}, cdd={cdd_ineligible_examples[:debug_sample_limit]}, min_anchor_children={min_anchor_children})"
+                )
                 print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - no_child_funcs (obj_com={obj_com_num}, cdd_com={cdd_com_num})")
             stats["skip_no_child_funcs_found"] += 1
             _store_pair(False, "skip_no_child_funcs_found")
@@ -470,6 +493,9 @@ def tpl_detection_fast_utils_annoy_v2(
                 (cdd_com_num, cdd_sim_num, cdd_hit_examples, cdd_miss_examples),
             )
             if is_debug:
+                print(
+                    f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: ineligible_anchors (obj={obj_ineligible_examples[:debug_sample_limit]}, cdd={cdd_ineligible_examples[:debug_sample_limit]}, min_anchor_children={min_anchor_children})"
+                )
                 print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_align_rate (gnn={gnn_score:.4f}, align_rate={align_rate:.4f}, score={gnn_score*align_rate_score:.4f} < 0.8)")
             stats["skip_low_align_rate"] += 1
             _store_pair(False, "skip_low_align_rate")
