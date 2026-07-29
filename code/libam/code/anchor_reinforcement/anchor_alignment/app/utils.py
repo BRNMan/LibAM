@@ -204,6 +204,13 @@ def tpl_detection_fast_utils_annoy_v2(
 
     alignment_tred = 3
     enable_progress = os.environ.get("LIBAM_TPL_PROGRESS", "1") == "1"
+    debug_filter_raw = os.environ.get("LIBAM_TPL_DEBUG_FUNC", "rpl_mbrtowc")
+    debug_filters = [item.strip() for item in debug_filter_raw.split(",") if item.strip()]
+    debug_all_low_align = os.environ.get("LIBAM_TPL_DEBUG_ALL_LOW_ALIGN", "0") == "1"
+    try:
+        debug_sample_limit = max(1, int(os.environ.get("LIBAM_TPL_DEBUG_SAMPLE_LIMIT", "8")))
+    except ValueError:
+        debug_sample_limit = 8
 
     obj_sim_funcs = []
     obj_sim_funcs_dict = {}
@@ -293,6 +300,53 @@ def tpl_detection_fast_utils_annoy_v2(
             rec["reject_reason"] = reason
             pair_stats.append(rec)
 
+        def _fmt_func_overlap_items(items):
+            if not items:
+                return "[]"
+            out_items = []
+            for src_func, overlaps in items[:debug_sample_limit]:
+                overlap_preview = overlaps[:debug_sample_limit]
+                out_items.append(f"{src_func}->{overlap_preview}")
+            return "[{}]".format(", ".join(out_items)
+            )
+
+        def _print_alignment_debug(reason, gnn_score_value, align_rate_value, chosen_side, obj_stats, cdd_stats):
+            should_print = is_debug or (debug_all_low_align and reason == "low_align_rate")
+            if not should_print:
+                return
+            obj_com, obj_sim, obj_hits, obj_miss = obj_stats
+            cdd_com, cdd_sim, cdd_hits, cdd_miss = cdd_stats
+            combined = gnn_score_value * (0.3 * align_rate_value + 0.7)
+            print(
+                "[DEBUG] {} vs {}: ALIGN_STATS reason={} chosen_side={} gnn={:.4f} align_rate={:.4f} combined={:.4f}".format(
+                    func_pair[0],
+                    func_pair[1],
+                    reason,
+                    chosen_side,
+                    gnn_score_value,
+                    align_rate_value,
+                    combined,
+                )
+            )
+            print(
+                "[DEBUG]   obj: common={} sim={} ratio={:.4f} hit_examples={} miss_examples={}".format(
+                    obj_com,
+                    obj_sim,
+                    (obj_sim / obj_com) if obj_com else 0.0,
+                    _fmt_func_overlap_items(obj_hits),
+                    obj_miss[:debug_sample_limit],
+                )
+            )
+            print(
+                "[DEBUG]   cdd: common={} sim={} ratio={:.4f} hit_examples={} miss_examples={}".format(
+                    cdd_com,
+                    cdd_sim,
+                    (cdd_sim / cdd_com) if cdd_com else 0.0,
+                    _fmt_func_overlap_items(cdd_hits),
+                    cdd_miss[:debug_sample_limit],
+                )
+            )
+
         if enable_progress and pair_idx % 50 == 0:
             pair_iter.set_postfix(
                 accepted=stats["accepted"],
@@ -304,9 +358,7 @@ def tpl_detection_fast_utils_annoy_v2(
         obj_afcg = get_afcg_one_annoy(func_pair[0], obj_sim_funcs, tar_afcg_dict)
         cdd_afcg = get_afcg_one_annoy(func_pair[1], cdd_sim_funcs, cdd_afcg_dict)
         
-        # DEBUG: Track a specific function
-        debug_func = "rpl_mbrtowc"
-        is_debug = debug_func in func_pair[0] or (debug_func in func_pair[1])
+        is_debug = any(token in func_pair[0] or token in func_pair[1] for token in debug_filters)
         
         if len(obj_afcg) == 0 or len(cdd_afcg) == 0:
             if is_debug:
@@ -350,29 +402,47 @@ def tpl_detection_fast_utils_annoy_v2(
 
         if gnn_score < gnn_threshold:
             if is_debug:
-                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_gnn (score={gnn_score:.4f} < 0.8)")
+                print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_gnn (score={gnn_score:.4f} < {gnn_threshold:.4f})")
             stats["skip_low_gnn"] += 1
             _store_pair(False, "skip_low_gnn")
             continue
 
-        obj_num = len(set(obj_fcg["feature"]))
-        cdd_num = len(set(cdd_fcg["feature"]))
+        obj_feature_set = set(obj_fcg["feature"])
+        cdd_feature_set = set(cdd_fcg["feature"])
+        obj_num = len(obj_feature_set)
+        cdd_num = len(cdd_feature_set)
         pair_record["obj_unique_funcs"] = int(obj_num)
         pair_record["cdd_unique_funcs"] = int(cdd_num)
 
         obj_com_num = obj_sim_num = 0
-        for obj_func in set(obj_fcg["feature"]):
+        obj_hit_examples = []
+        obj_miss_examples = []
+        for obj_func in obj_feature_set:
             if obj_func in obj_com_funcs:
                 obj_com_num += 1
-                if obj_func in obj_sim_funcs_dict and list(set(obj_sim_funcs_dict[obj_func]).intersection(set(cdd_fcg["feature"]))) != []:
+                related_cdd = set(obj_sim_funcs_dict.get(obj_func, []))
+                overlap = sorted(list(related_cdd.intersection(cdd_feature_set)))
+                if overlap:
                     obj_sim_num += 1
+                    if is_debug or debug_all_low_align:
+                        obj_hit_examples.append((obj_func, overlap))
+                elif is_debug or debug_all_low_align:
+                    obj_miss_examples.append(obj_func)
 
         cdd_com_num = cdd_sim_num = 0
-        for cdd_func in set(cdd_fcg["feature"]):
+        cdd_hit_examples = []
+        cdd_miss_examples = []
+        for cdd_func in cdd_feature_set:
             if cdd_func in cdd_com_funcs:
                 cdd_com_num += 1
-                if cdd_func in cdd_sim_funcs_dict and list(set(cdd_sim_funcs_dict[cdd_func]).intersection(set(obj_fcg["feature"]))) != []:
+                related_obj = set(cdd_sim_funcs_dict.get(cdd_func, []))
+                overlap = sorted(list(related_obj.intersection(obj_feature_set)))
+                if overlap:
                     cdd_sim_num += 1
+                    if is_debug or debug_all_low_align:
+                        cdd_hit_examples.append((cdd_func, overlap))
+                elif is_debug or debug_all_low_align:
+                    cdd_miss_examples.append(cdd_func)
 
         if obj_com_num == 0 or cdd_com_num == 0:
             if is_debug:
@@ -380,15 +450,25 @@ def tpl_detection_fast_utils_annoy_v2(
             stats["skip_no_child_funcs_found"] += 1
             _store_pair(False, "skip_no_child_funcs_found")
             continue
+        chosen_side = "obj"
         if obj_com_num <= cdd_com_num:
             align_rate = obj_sim_num / obj_com_num
         else:
+            chosen_side = "cdd"
             align_rate = cdd_sim_num / cdd_com_num
 
         pair_record["align_rate"] = float(align_rate)
 
         align_rate_score = 0.3 * align_rate + 0.7
         if gnn_score * align_rate_score < 0.8:
+            _print_alignment_debug(
+                "low_align_rate",
+                gnn_score,
+                align_rate,
+                chosen_side,
+                (obj_com_num, obj_sim_num, obj_hit_examples, obj_miss_examples),
+                (cdd_com_num, cdd_sim_num, cdd_hit_examples, cdd_miss_examples),
+            )
             if is_debug:
                 print(f"[DEBUG] {func_pair[0]} vs {func_pair[1]}: SKIPPED - low_align_rate (gnn={gnn_score:.4f}, align_rate={align_rate:.4f}, score={gnn_score*align_rate_score:.4f} < 0.8)")
             stats["skip_low_align_rate"] += 1
