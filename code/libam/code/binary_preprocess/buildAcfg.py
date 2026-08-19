@@ -12,8 +12,8 @@ from extract_statistical_features import *
 
 # 构建函数的ACFG
 def buildCfg(func, externs_eas, ea_externs):
-    func_start = func.startEA
-    func_end = func.endEA
+    func_start = func.start_ea
+    func_end = func.end_ea
     cfg = nx.DiGraph()
     control_blocks, main_blocks = obtain_block_sequence(func)
     visited = {}
@@ -25,13 +25,13 @@ def buildCfg(func, externs_eas, ea_externs):
             src_id = len(cfg)
             visited[src_node] = src_id
             cfg.add_node(src_id)
-            cfg.node[src_id]['label'] = src_node
+            cfg.nodes[src_id]['label'] = src_node
         else:
             src_id = visited[src_node]
         if start == func_start:
-            cfg.node[src_id]['c'] = "start"
+            cfg.nodes[src_id]['c'] = "start"
         if end == func_end:
-            cfg.node[src_id]['c'] = "end"
+            cfg.nodes[src_id]['c'] = "end"
         # 只有跳转
         refs = CodeRefsTo(start, 0)
         for ref in refs:
@@ -41,7 +41,7 @@ def buildCfg(func, externs_eas, ea_externs):
                     visited[dst_node] = len(cfg)
                 dst_id = visited[dst_node]
                 cfg.add_edge(dst_id, src_id)
-                cfg.node[dst_id]['label'] = dst_node
+                cfg.nodes[dst_id]['label'] = dst_node
         # 包括代码顺序执行调用
         refs = CodeRefsTo(start, 1)
         for ref in refs:
@@ -51,7 +51,7 @@ def buildCfg(func, externs_eas, ea_externs):
                     visited[dst_node] = len(cfg)
                 dst_id = visited[dst_node]
                 cfg.add_edge(dst_id, src_id)
-                cfg.node[dst_id]['label'] = dst_node
+                cfg.nodes[dst_id]['label'] = dst_node
     attributingRe(cfg, externs_eas, ea_externs)
     # ACFG图可以优化 ----待做
     return cfg, 0
@@ -59,45 +59,45 @@ def buildCfg(func, externs_eas, ea_externs):
 
 def attributingRe(cfg, externs_eas, ea_extern):
     for node_id in cfg:
-        bl = cfg.node[node_id]['label']
+        bl = cfg.nodes[node_id]['label']
         numIns = calInstrs(bl)
         # 指令数量
-        cfg.node[node_id]['numIns'] = numIns
+        cfg.nodes[node_id]['numIns'] = numIns
         numCalls = calCalls(bl)
         # 调用数量
-        cfg.node[node_id]['numCalls'] = numCalls
+        cfg.nodes[node_id]['numCalls'] = numCalls
         numAs = calArithmeticInstr(bl)
         # 算数指令数量
-        cfg.node[node_id]['numAs'] = numAs
+        cfg.nodes[node_id]['numAs'] = numAs
         strings, consts = getBBconsts(bl)
         # 数值常数
-        cfg.node[node_id]['consts'] = consts
+        cfg.nodes[node_id]['consts'] = consts
         # 字符串常量
-        cfg.node[node_id]['strings'] = strings
-        cfg.node[node_id]['numNc'] = len(strings) + len(consts)
+        cfg.nodes[node_id]['strings'] = strings
+        cfg.nodes[node_id]['numNc'] = len(strings) + len(consts)
         numTransfer = calTransferIns(bl)
         # 转移指令数量
-        cfg.node[node_id]['numTransfer'] = numTransfer
+        cfg.nodes[node_id]['numTransfer'] = numTransfer
         externs = retrieveExterns(bl, ea_extern)
         # 调用外部基本块地址
-        cfg.node[node_id]['externs'] = externs
+        cfg.nodes[node_id]['externs'] = externs
         numLIs = calLogicInstructions(bl)
         # 逻辑指令的数量
-        cfg.node[node_id]['numLIs'] = numLIs
+        cfg.nodes[node_id]['numLIs'] = numLIs
     pass
 
 # 获取函数内所有基本块转移地址集合
 def obtain_block_sequence(func):
     control_blocks = {}
     main_blocks = {}
-    blocks = [(v.startEA, v.endEA) for v in FlowChart(func)]
+    blocks = [(v.start_ea, v.end_ea) for v in FlowChart(func)]
     for bl in blocks:
         base = bl[0]
-        end = PrevHead(bl[1])
+        end = idc.prev_head(bl[1])
         control_ea = checkCB(bl)
         control_blocks[control_ea] = bl
         control_blocks[end] = bl
-        if func.startEA <= base <= func.endEA:
+        if func.start_ea <= base <= func.end_ea:
             main_blocks[base] = bl
     x = sorted(main_blocks)
     return control_blocks, x
@@ -111,8 +111,8 @@ def checkCB(bl):
     while ea < end:
         if checkCondition(ea):
             return ea
-        ea = NextHead(ea)
-    return PrevHead(end)
+        ea = idc.next_head(ea)
+    return idc.prev_head(end)
     pass
 
 # 判断是否为跳转指令
@@ -124,7 +124,7 @@ def checkCondition(ea):
     conds.update(mips_branch)
     conds.update(x86_branch)
     conds.update(arm_branch)
-    opcode = GetMnem(ea)
+    opcode = idc.print_insn_mnem(ea)
     if opcode in conds:
         return True
     return False

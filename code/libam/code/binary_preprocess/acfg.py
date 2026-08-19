@@ -7,6 +7,7 @@
 import sys
 from settings import *
 sys.path.insert(0, PACKAGE_PATH)
+sys.path.insert(0, PACKAGE_PATH2)
 import networkx as nx
 
 # 函数的acfg图
@@ -32,7 +33,7 @@ class func_acfg:
         for node in self.old_g:
             f_vector = self.retrieveVec(node, self.old_g)
             self.g.add_node(node)
-            self.g.node[node]['vec'] = f_vector
+            self.g.nodes[node]['vec'] = f_vector
 
         # 构建边
         for edge in self.old_g.edges():
@@ -47,7 +48,7 @@ class func_acfg:
         for node in nodes:
             ins = {}
             self.getIn(g, node, ins)
-            g.node[node]['numIn'] = len(ins)
+            g.nodes[node]['numIn'] = len(ins)
         return g
         pass
 
@@ -66,7 +67,7 @@ class func_acfg:
         for node in nodes:
             offsprings = {}
             self.getOffsprings(g, node, offsprings)
-            g.node[node]['offsprings'] = len(offsprings)
+            g.nodes[node]['offsprings'] = len(offsprings)
         return g
         pass
 
@@ -83,7 +84,7 @@ class func_acfg:
     def retrieveVec(self, id_, g):
         feature_vec = []
         # 字符串常量
-        strings = g.node[id_]['strings']
+        strings = g.nodes[id_]['strings']
         # 求所有字符串常量的长度平均值
         # s_sum = 0
         # if len(strings) != 0:
@@ -94,7 +95,7 @@ class func_acfg:
         s_sum = float(len(strings))
         feature_vec.append(s_sum)
         # 数值常数
-        numConsts = g.node[id_]['consts']
+        numConsts = g.nodes[id_]['consts']
         # 求所有数值常数的平均值
         # numC = 0
         # if len(numConsts) != 0:
@@ -105,19 +106,19 @@ class func_acfg:
         numC = float(len(numConsts))
         feature_vec.append(numC)
         # 转移指令的数量
-        numTransfer = float(g.node[id_]['numTransfer'])
+        numTransfer = float(g.nodes[id_]['numTransfer'])
         feature_vec.append(numTransfer)
         # 调用的数量
-        numCalls = float(g.node[id_]['numCalls'])
+        numCalls = float(g.nodes[id_]['numCalls'])
         feature_vec.append(numCalls)
         # 指令的数量
-        numInstr = float(g.node[id_]['numIns'])
+        numInstr = float(g.nodes[id_]['numIns'])
         feature_vec.append(numInstr)
         # 算数指令的数量
-        numAs = float(g.node[id_]['numAs'])
+        numAs = float(g.nodes[id_]['numAs'])
         feature_vec.append(numAs)
         # 后代节点数量
-        offsprings = float(g.node[id_]['offsprings'])
+        offsprings = float(g.nodes[id_]['offsprings'])
         feature_vec.append(offsprings)
 
         # # 逻辑指令的数量
